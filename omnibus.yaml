@@ -1,0 +1,7 @@
+---
+
+dependency-blacklist:
+  # This is provided as a single downloadable .pem file, which isn't something
+  # Lorry can understand. Also, it's provided by the 'ca-certificates' chunk in
+  # Baserock already.
+  - cacerts

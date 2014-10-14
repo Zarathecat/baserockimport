@@ -1,0 +1,17 @@
+Omnibus import
+==============
+
+See 'README' for general information on the Baserock Import Tool.
+
+To use
+------
+
+First, clone the Git repository corresponding to the Omnibus project you want
+to import. For example, if you want to import the Chef Server, clone:
+<https://github.com/opscode/omnibus-chef-server>
+
+As per Omnibus' instructions, you should then run `bundle install --binstubs`
+in the checkout to make available the various dependent repos and Gems of the
+project definitions.
+
+

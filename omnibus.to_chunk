@@ -1,0 +1,274 @@
+#!/usr/bin/env ruby
+#
+# Create a chunk morphology to integrate Omnibus software in Baserock
+#
+# Copyright (C) 2014  Codethink Limited
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; version 2 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+require 'bundler'
+require 'omnibus'
+
+require 'optparse'
+require 'rubygems/commands/build_command'
+require 'rubygems/commands/install_command'
+require 'shellwords'
+
+require_relative 'importer_base'
+
+BANNER = "Usage: omnibus.to_chunk PROJECT_DIR PROJECT_NAME SOURCE_DIR SOFTWARE_NAME"
+
+DESCRIPTION = <<-END
+Generate a .morph file for a given Omnibus software component.
+END
+
+class Omnibus::Builder
+  # It's possible to use `gem install` in build commands, which is a great
+  # way of subverting the dependency tracking Omnibus provides. It's done
+  # in `omnibus-chef/config/software/chefdk.rb`, for example.
+  #
+  # To handle this, here we extend the class that executes the build commands
+  # to detect when `gem install` is run. It uses the Gem library to turn the
+  # commandline back into a Bundler::Dependency object that we can use.
+  #
+  # We also trap `gem build` so we know when a software component is a RubyGem
+  # that should be handled by 'rubygems.to_chunk'.
+
+  class GemBuildCommandParser < Gem::Commands::BuildCommand
+    def gemspec_path(args)
+      handle_options args
+      if options[:args].length != 1
+        raise Exception, "Invalid `gem build` commandline: 1 argument " +
+                         "expected, got #{options[:args]}."
+      end
+      options[:args][0]
+    end
+  end
+
+  class GemInstallCommandParser < Gem::Commands::InstallCommand
+    def dependency_list_from_commandline(args)
+      handle_options args
+
+      # `gem install foo*` is sometimes used when installing a locally built
+      # Gem, to avoid needing to know the exact version number that was built.
+      # We only care about remote Gems being installed, so anything with a '*'
+      # in its name can be ignored.
+      gem_names = options[:args].delete_if { |name| name.include?('*') }
+
+      gem_names.collect do |gem_name|
+        Bundler::Dependency.new(gem_name, options[:version])
+      end
+    end
+  end
+
+  def gem(command, options = {})
+    # This function re-implements the 'gem' function in the build-commands DSL.
+    if command.start_with? 'build'
+      parser = GemBuildCommandParser.new
+      args = Shellwords.split(command).drop(1)
+      if built_gemspec != nil
+        raise Exception, "More than one `gem build` command was run as part " +
+                         "of the build process. The 'rubygems.to_chunk' " +
+                         "program currently supports only one .gemspec " +
+                         "build per chunk, so this can't be processed " +
+                         "automatically."
+      end
+      @built_gemspec = parser.gemspec_path(args)
+    elsif command.start_with? 'install'
+      parser = GemInstallCommandParser.new
+      args = Shellwords.split(command).drop(1)
+      args_without_build_flags = args.take_while { |item| item != '--' }
+      gems = parser.dependency_list_from_commandline(args_without_build_flags)
+      manually_installed_rubygems.concat gems
+    end
+  end
+
+  def built_gemspec
+    @built_gemspec
+  end
+
+  def manually_installed_rubygems
+    @manually_installed_rubygems ||= []
+  end
+end
+
+class OmnibusChunkMorphologyGenerator < Importer::Base
+  def initialize
+    local_data = YAML.load_file(local_data_path("omnibus.yaml"))
+    @dependency_blacklist = local_data['dependency-blacklist']
+  end
+
+  def parse_options(arguments)
+    opts = create_option_parser(BANNER, DESCRIPTION)
+
+    parsed_arguments = opts.parse!(arguments)
+
+    if parsed_arguments.length != 4 and parsed_arguments.length != 5
+      STDERR.puts "Expected 4 or 5 arguments, got #{parsed_arguments}."
+      opts.parse(['-?'])
+      exit 255
+    end
+
+    project_dir, project_name, source_dir, software_name, expected_version = \
+      parsed_arguments
+    # Not yet implemented
+    #if expected_version != nil
+    #  expected_version = Gem::Version.new(expected_version)
+    #end
+    [project_dir, project_name, source_dir, software_name, expected_version]
+  end
+
+  class SubprocessError < RuntimeError
+  end
+
+  def run_tool_capture_output(tool_name, *args)
+    tool_path = local_data_path(tool_name)
+
+    # FIXME: something breaks when we try to share this FD, it's not
+    # ideal that the subprocess doesn't log anything, though.
+    env_changes = {'MORPH_LOG_FD' => nil}
+
+    command = [[tool_path, tool_name], *args]
+    log.info("Running #{command.join(' ')} in #{scripts_dir}")
+
+    text = IO.popen(
+      env_changes, command, :chdir => scripts_dir, :err => [:child, :out]
+    ) do |io|
+      io.read
+    end
+
+    if $? == 0
+      text
+    else
+      raise SubprocessError, text
+    end
+  end
+
+  def generate_chunk_morph_for_rubygems_software(software, source_dir)
+    # This is a better heuristic for getting the name of the Gem
+    # than the software name, it seems ...
+    gem_name = software.relative_path
+
+    text = run_tool_capture_output('rubygems.to_chunk', source_dir, gem_name)
+    log.debug("Text from output: #{text}, result #{$?}")
+
+    morphology = YAML::load(text)
+    return morphology
+  rescue SubprocessError => e
+    error "Tried to import #{software.name} as a RubyGem, got the " \
+          "following error from rubygems.to_chunk: #{e.message}"
+    exit 1
+  end
+
+  def resolve_rubygems_deps(requirements)
+    return {} if requirements.empty?
+
+    log.info('Resolving RubyGem requirements with Bundler')
+
+    fake_gemfile = Bundler::Dsl.new
+    fake_gemfile.source('https://rubygems.org')
+
+    requirements.each do |dep|
+      fake_gemfile.gem(dep.name, dep.requirement)
+    end
+
+    definition = fake_gemfile.to_definition('Gemfile.lock', true)
+    resolved_specs = definition.resolve_remotely!
+
+    Hash[resolved_specs.collect { |spec| [spec.name, spec.version.to_s]}]
+  end
+
+  def generate_chunk_morph_for_software(project, software, source_dir)
+    if software.builder.built_gemspec != nil
+      morphology = generate_chunk_morph_for_rubygems_software(software,
+                                                              source_dir)
+    else
+      morphology = {
+        "name" => software.name,
+        "kind" => "chunk",
+        "description" => "Automatically generated by omnibus.to_chunk"
+      }
+    end
+
+    omnibus_deps = {}
+    rubygems_deps = {}
+
+    software.dependencies.each do |name|
+      software = Omnibus::Software.load(project, name)
+      if @dependency_blacklist.member? name
+        log.info(
+          "Not adding #{name} as a dependency as it is marked to be ignored.")
+      elsif software.fetcher.instance_of?(Omnibus::PathFetcher)
+        log.info(
+          "Not adding #{name} as a dependency: it's installed from " +
+          "a path which probably means that it is package configuration, not " +
+          "a 3rd-party component to be imported.")
+      elsif software.fetcher.instance_of?(Omnibus::NullFetcher)
+        if software.builder.built_gemspec
+          log.info(
+            "Adding #{name} as a RubyGem dependency because it builds " +
+            "#{software.builder.built_gemspec}")
+          rubygems_deps[name] = software.version
+        else
+          log.info(
+            "Not adding #{name} as a dependency: no sources listed.")
+        end
+      else
+        omnibus_deps[name] = software.version
+      end
+    end
+
+    gem_requirements = software.builder.manually_installed_rubygems
+    rubygems_deps = resolve_rubygems_deps(gem_requirements)
+
+    morphology.update({
+      # Possibly this tool should look at software.build and
+      # generate suitable configure, build and install-commands.
+      # For now: don't bother!
+
+      # FIXME: are these build or runtime dependencies? We'll assume both.
+      "x-build-dependencies-omnibus" => omnibus_deps,
+      "x-runtime-dependencies-omnibus" => omnibus_deps,
+
+      "x-build-dependencies-rubygems" => {},
+      "x-runtime-dependencies-rubygems" => rubygems_deps,
+    })
+
+    if software.description
+      morphology['description'] = software.description + '\n\n' +
+        morphology['description']
+    end
+
+    morphology
+  end
+
+  def run
+    project_dir, project_name, source_dir, software_name = parse_options(ARGV)
+
+    log.info("Creating chunk morph for #{software_name} from project " +
+             "#{project_name}, defined in #{project_dir}")
+
+    Dir.chdir(project_dir)
+
+    project = Omnibus::Project.load(project_name)
+
+    software = Omnibus::Software.load(@project, software_name)
+
+    morph = generate_chunk_morph_for_software(project, software, source_dir)
+
+    write_morph(STDOUT, morph)
+  end
+end
+
+OmnibusChunkMorphologyGenerator.new.run

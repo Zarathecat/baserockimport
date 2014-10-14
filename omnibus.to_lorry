@@ -1,0 +1,94 @@
+#!/usr/bin/env ruby
+#
+# Create a Baserock .lorry file for a given Omnibus software component
+#
+# Copyright (C) 2014  Codethink Limited
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; version 2 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+require 'bundler'
+require 'omnibus'
+
+require 'optparse'
+require 'rubygems/commands/install_command'
+require 'shellwords'
+
+require_relative 'importer_base'
+
+BANNER = "Usage: omnibus.to_lorry PROJECT_DIR PROJECT_NAME SOFTWARE_NAME"
+
+DESCRIPTION = <<-END
+Generate a .lorry file for a given Omnibus software component.
+END
+
+class OmnibusLorryGenerator < Importer::Base
+  def parse_options(arguments)
+    opts = create_option_parser(BANNER, DESCRIPTION)
+
+    parsed_arguments = opts.parse!(arguments)
+
+    if parsed_arguments.length != 3
+      STDERR.puts "Expected 3 arguments, got #{parsed_arguments}."
+      opts.parse(['-?'])
+      exit 255
+    end
+
+    project_dir, project_name, software_name = parsed_arguments
+    [project_dir, project_name, software_name]
+  end
+
+  def generate_lorry_for_software(software)
+    lorry_body = {
+      'x-products-omnibus' => [software.name]
+    }
+
+    if software.source and software.source.member? :git
+      lorry_body.update({
+        'type' => 'git',
+        'url' => software.source[:git],
+      })
+    elsif software.source and software.source.member? :url
+      lorry_body.update({
+        'type' => 'tarball',
+        'url' => software.source[:url],
+        # lorry doesn't validate the checksum right now, but maybe it should.
+      'x-md5' => software.source[:md5],
+      })
+    else
+      error "Couldn't generate lorry file from source '#{software.source.inspect}'"
+      exit 1
+    end
+
+    { software.name => lorry_body }
+  end
+
+  def run
+    project_dir, project_name, software_name = parse_options(ARGV)
+
+    log.info("Creating lorry for #{software_name} from project " +
+             "#{project_name}, defined in #{project_dir}")
+
+    Dir.chdir(project_dir)
+
+    project = Omnibus::Project.load(project_name)
+
+    software = Omnibus::Software.load(project, software_name)
+
+    lorry = generate_lorry_for_software(software)
+
+    write_lorry(STDOUT, lorry)
+  end
+end
+
+OmnibusLorryGenerator.new.run
