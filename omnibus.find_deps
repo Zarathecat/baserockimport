@@ -1,0 +1,138 @@
+#!/usr/bin/env ruby
+#
+# Find dependencies for an Omnibus software component.
+#
+# Copyright (C) 2014  Codethink Limited
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; version 2 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+require 'bundler'
+
+require_relative 'importer_base'
+require_relative 'importer_omnibus_extensions'
+
+BANNER = "Usage: omnibus.find_deps PROJECT_DIR PROJECT_NAME SOURCE_DIR SOFTWARE_NAME"
+
+DESCRIPTION = <<-END
+Calculate dependencies for a given Omnibus software component.
+END
+
+class OmnibusDependencyFinder < Importer::Base
+  def initialize
+    local_data = YAML.load_file(local_data_path("omnibus.yaml"))
+    @dependency_blacklist = local_data['dependency-blacklist']
+  end
+
+  def parse_options(arguments)
+    opts = create_option_parser(BANNER, DESCRIPTION)
+
+    parsed_arguments = opts.parse!(arguments)
+
+    if parsed_arguments.length != 4 and parsed_arguments.length != 5
+      STDERR.puts "Expected 4 or 5 arguments, got #{parsed_arguments}."
+      opts.parse(['-?'])
+      exit 255
+    end
+
+    project_dir, project_name, source_dir, software_name, expected_version = \
+      parsed_arguments
+    # Not yet implemented
+    #if expected_version != nil
+    #  expected_version = Gem::Version.new(expected_version)
+    #end
+    [project_dir, project_name, source_dir, software_name, expected_version]
+  end
+
+  def resolve_rubygems_deps(requirements)
+    return {} if requirements.empty?
+
+    log.info('Resolving RubyGem requirements with Bundler')
+
+    fake_gemfile = Bundler::Dsl.new
+    fake_gemfile.source('https://rubygems.org')
+
+    requirements.each do |dep|
+      fake_gemfile.gem(dep.name, dep.requirement)
+    end
+
+    definition = fake_gemfile.to_definition('Gemfile.lock', true)
+    resolved_specs = definition.resolve_remotely!
+
+    Hash[resolved_specs.collect { |spec| [spec.name, spec.version.to_s]}]
+  end
+
+  def calculate_dependencies_for_software(project, software, source_dir)
+    omnibus_deps = {}
+    rubygems_deps = {}
+
+    software.dependencies.each do |name|
+      software = Omnibus::Software.load(project, name)
+      if @dependency_blacklist.member? name
+        log.info(
+          "Not adding #{name} as a dependency as it is marked to be ignored.")
+      elsif software.fetcher.instance_of?(Omnibus::PathFetcher)
+        log.info(
+          "Not adding #{name} as a dependency: it's installed from " +
+          "a path which probably means that it is package configuration, not " +
+          "a 3rd-party component to be imported.")
+      elsif software.fetcher.instance_of?(Omnibus::NullFetcher)
+        if software.builder.built_gemspec
+          log.info(
+            "Adding #{name} as a RubyGem dependency because it builds " +
+            "#{software.builder.built_gemspec}")
+          rubygems_deps[name] = software.version
+        else
+          log.info(
+            "Not adding #{name} as a dependency: no sources listed.")
+        end
+      else
+        omnibus_deps[name] = software.version
+      end
+    end
+
+    gem_requirements = software.builder.manually_installed_rubygems
+    rubygems_deps = resolve_rubygems_deps(gem_requirements)
+
+    {
+      "omnibus" => {
+        # FIXME: are these build or runtime dependencies? We'll assume both.
+        "build-dependencies" => omnibus_deps,
+        "runtime-dependencies" => omnibus_deps,
+      },
+      "rubygems" => {
+        "build-dependencies" => {},
+        "runtime-dependencies" => rubygems_deps,
+      }
+    }
+  end
+
+  def run
+    project_dir, project_name, source_dir, software_name = parse_options(ARGV)
+
+    log.info("Calculating dependencies for #{software_name} from project " +
+             "#{project_name}, defined in #{project_dir}")
+
+    Dir.chdir(project_dir)
+
+    project = Omnibus::Project.load(project_name)
+
+    software = Omnibus::Software.load(@project, software_name)
+
+    dependencies = calculate_dependencies_for_software(
+      project, software, source_dir)
+    write_dependencies(STDOUT, dependencies)
+  end
+end
+
+OmnibusDependencyFinder.new.run

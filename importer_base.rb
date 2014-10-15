@@ -63,6 +63,11 @@ module Importer
       file.write(YAML.dump(morph))
     end
 
+    def write_dependencies(file, dependencies)
+      format_options = { :indent => '    ' }
+      file.puts(JSON.pretty_generate(dependencies, format_options))
+    end
+
     def create_logger
       # Use the logger that was passed in from the 'main' import process, if
       # detected.

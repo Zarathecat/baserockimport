@@ -1,0 +1,114 @@
+#!/usr/bin/env ruby
+#
+# Find dependencies for a RubyGem.
+#
+# Copyright (C) 2014  Codethink Limited
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; version 2 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+require_relative 'importer_base'
+require_relative 'importer_bundler_extensions'
+
+BANNER = "Usage: rubygems.find_deps SOURCE_DIR GEM_NAME [VERSION]"
+
+DESCRIPTION = <<-END
+This tool looks for a .gemspec file for GEM_NAME in SOURCE_DIR, and outputs the
+set of RubyGems dependencies required to build it. It will honour a
+Gemfile.lock file if one is present.
+
+It is intended for use with the `baserock-import` tool.
+END
+
+class RubyGemDependencyFinder < Importer::Base
+  include Importer::BundlerExtensions
+
+  def initialize
+    local_data = YAML.load_file(local_data_path("rubygems.yaml"))
+    @build_dependency_whitelist = local_data['build-dependency-whitelist']
+  end
+
+  def parse_options(arguments)
+    opts = create_option_parser(BANNER, DESCRIPTION)
+
+    parsed_arguments = opts.parse!(arguments)
+
+    if parsed_arguments.length != 2 && parsed_arguments.length != 3
+      STDERR.puts "Expected 2 or 3 arguments, got #{parsed_arguments}."
+      opts.parse(['-?'])
+      exit 255
+    end
+
+    source_dir, gem_name, expected_version = parsed_arguments
+    source_dir = File.absolute_path(source_dir)
+    if expected_version != nil
+      expected_version = Gem::Version.new(expected_version.dup)
+    end
+    [source_dir, gem_name, expected_version]
+  end
+
+  def build_deps_for_gem(spec)
+    deps = spec.dependencies.select do |d|
+      d.type == :development && @build_dependency_whitelist.member?(d.name)
+    end
+  end
+
+  def runtime_deps_for_gem(spec)
+    spec.dependencies.select {|d| d.type == :runtime}
+  end
+
+  def run
+    source_dir_name, gem_name, expected_version = parse_options(ARGV)
+
+    log.info("Finding dependencies for #{gem_name} based on " +
+             "source code in #{source_dir_name}")
+
+    resolved_specs = Dir.chdir(source_dir_name) do
+      definition = create_bundler_definition_for_gemspec(gem_name)
+      definition.resolve_remotely!
+    end
+
+    spec = get_spec_for_gem(resolved_specs, gem_name)
+    validate_spec(spec, source_dir_name, expected_version)
+
+    # One might think that you could use the Bundler::Dependency.groups
+    # field to filter but it doesn't seem to be useful. Instead we go back to
+    # the Gem::Specification of the target Gem and use the dependencies fild
+    # there. We look up each dependency in the resolved_specset to find out
+    # what version Bundler has chosen of it.
+
+    def format_deps(specset, dep_list)
+      info = dep_list.collect do |dep|
+        spec = specset[dep][0]
+        [spec.name, spec.version.to_s]
+      end
+      Hash[info]
+    end
+
+    build_deps = format_deps(
+      resolved_specs, build_deps_for_gem(spec))
+    runtime_deps = format_deps(
+      resolved_specs, runtime_deps_for_gem(spec))
+
+    deps = {
+      'rubygems' => {
+        'build-dependencies' => build_deps,
+        'runtime-dependencies' => runtime_deps,
+      }
+    }
+
+    write_dependencies(STDOUT, deps)
+  end
+end
+
+RubyGemDependencyFinder.new.run

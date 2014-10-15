@@ -264,6 +264,7 @@ class Package(object):
         self.version = version
         self.required_by = []
         self.morphology = None
+        self.dependencies = None
         self.is_build_dep = False
         self.version_in_use = version
 
@@ -289,6 +290,9 @@ class Package(object):
 
     def set_morphology(self, morphology):
         self.morphology = morphology
+
+    def set_dependencies(self, dependencies):
+        self.dependencies = dependencies
 
     def set_is_build_dep(self, is_build_dep):
         self.is_build_dep = is_build_dep
@@ -405,8 +409,8 @@ class ImportLoop(object):
             processed.add_node(current_item)
 
             if not error:
-                self._process_dependencies_from_morphology(
-                    current_item, current_item.morphology, to_process,
+                self._process_dependencies(
+                    current_item, current_item.dependencies, to_process,
                     processed)
 
         if len(errors) > 0:
@@ -448,34 +452,25 @@ class ImportLoop(object):
 
         package.set_morphology(chunk_morph)
 
-    def _process_dependencies_from_morphology(self, current_item, morphology,
-                                              to_process, processed):
+        dependencies = self._find_or_create_dependency_list(
+            kind, name, checked_out_version, source_repo)
+
+        package.set_dependencies(dependencies)
+
+    def _process_dependencies(self, current_item, dependencies, to_process,
+                              processed):
         '''Enqueue all dependencies of a package that are yet to be processed.
 
-        Dependencies are communicated using extra fields in morphologies,
-        currently.
-
         '''
-        for key, value in morphology.iteritems():
-            if key.startswith('x-build-dependencies-'):
-                kind = key[len('x-build-dependencies-'):]
-                is_build_deps = True
-            elif key.startswith('x-runtime-dependencies-'):
-                kind = key[len('x-runtime-dependencies-'):]
-                is_build_deps = False
-            else:
-                continue
-
-            # We need to validate this field because it doesn't go through the
-            # normal MorphologyFactory validation, being an extension.
-            if not hasattr(value, 'iteritems'):
-                value_type = type(value).__name__
-                raise cliapp.AppException(
-                    "Morphology for %s has invalid '%s': should be a dict, but "
-                    "got a %s." % (morphology['name'], key, value_type))
+        for key, value in dependencies.iteritems():
+            kind = key
 
             self._process_dependency_list(
-                current_item, kind, value, to_process, processed, is_build_deps)
+                current_item, kind, value['build-dependencies'], to_process,
+                processed, True)
+            self._process_dependency_list(
+                current_item, kind, value['runtime-dependencies'], to_process,
+                processed, False)
 
     def _process_dependency_list(self, current_item, kind, deps, to_process,
                                  processed, these_are_build_deps):
@@ -689,6 +684,50 @@ class ImportLoop(object):
         text = run_extension(tool, args)
 
         return self.morphloader.load_from_string(text, filename)
+
+    def _find_or_create_dependency_list(self, kind, name, version,
+                                        source_repo):
+        depends_filename = 'strata/%s/%s-%s.foreign-dependencies' % (
+            self.goal_name, name, version)
+        depends_path = os.path.join(
+            self.app.settings['definitions-dir'], depends_filename)
+
+        def calculate_dependencies():
+            dependencies = self._calculate_dependencies_for_package(
+                source_repo, kind, name, version, depends_path)
+            with open(depends_path, 'w') as f:
+                json.dump(dependencies, f)
+            return dependencies
+
+        if self.app.settings['update-existing']:
+            dependencies = calculate_dependencies()
+        elif os.path.exists(depends_path):
+            with open(depends_path) as f:
+                dependencies = json.load(f)
+        else:
+            logging.debug("Didn't find %s", depends_path)
+            dependencies = calculate_dependencies()
+
+        return dependencies
+
+    def _calculate_dependencies_for_package(self, source_repo, kind, name,
+                                            version, filename):
+        tool = '%s.find_deps' % kind
+
+        if kind not in self.importers:
+            raise Exception('Importer for %s was not enabled.' % kind)
+        extra_args = self.importers[kind]['extra_args']
+
+        self.app.status(
+            'Calling %s to calculate dependencies for %s %s', tool, name,
+            version)
+
+        args = extra_args + [source_repo.dirname, name]
+        if version != 'master':
+            args.append(version)
+        text = run_extension(tool, args)
+
+        return json.loads(text)
 
     def _sort_chunks_by_build_order(self, graph):
         order = reversed(sorted(graph.nodes()))
