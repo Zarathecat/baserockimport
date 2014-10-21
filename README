@@ -35,9 +35,9 @@ worthwhile to do that for common patterns.
 Package-system specific code and data
 -------------------------------------
 
-For each supported package system, there should be an xxx.to_lorry program, and
-a xxx.to_chunk program. These should output on stdout a .lorry file and a .morph
-file, respectively.
+For each supported package system, there should be an xxx.to_lorry program, an
+xxx.to_chunk program and a xxx.find_deps program. These should output on stdout
+a .lorry file, and a .morph file, and dependency information respectively.
 
 Each packaging system can have static data saved in a .yaml file, for known
 metadata that the programs cannot discover automatically.
