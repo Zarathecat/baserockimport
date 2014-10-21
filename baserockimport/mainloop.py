@@ -61,7 +61,20 @@ def find(iterable, match):
     return next((x for x in iterable if match(x)), None)
 
 
-def run_extension(filename, args, cwd='.'):
+def run_extension(filename, args):
+    '''Run the import extension 'filename' with the given arguments.
+
+    Returns the output written by the extension to its stdout.
+
+    If the extension subprocess returns an
+    error code (any value other than zero) then BaserockImportException will be
+    raised, with the contents of stderr stored in its .message attribute.
+
+    Note that the stdout and strerr processing expects each line to be
+    terminated with '\n' (newline character). Any output beyond the last \n
+    character will be ignored.
+
+    '''
     output = []
     errors = []
 
@@ -88,7 +101,8 @@ def run_extension(filename, args, cwd='.'):
 
     extension_path = os.path.join(extensions_dir(), filename)
 
-    logging.debug("Running %s %s with cwd %s" % (extension_path, args, cwd))
+    logging.debug("Running %s %s" % (extension_path, args))
+    cwd = '.'
     returncode = ext.run(extension_path, args, cwd, os.environ)
 
     if returncode == 0:
@@ -110,12 +124,13 @@ class ImportLoop(object):
 
     '''
 
-    def __init__(self, app, goal_kind, goal_name, goal_version, extra_args=[]):
+    def __init__(self, app, goal_kind, goal_name, goal_version):
+        '''Set up an ImportLoop to process dependencies of one goal package.'''
+
         self.app = app
         self.goal_kind = goal_kind
         self.goal_name = goal_name
         self.goal_version = goal_version
-        self.extra_args = extra_args
 
         self.lorry_set = baserockimport.lorryset.LorrySet(
             self.app.settings['lorries-dir'])
@@ -127,6 +142,17 @@ class ImportLoop(object):
         self.importers = {}
 
     def enable_importer(self, kind, extra_args=[]):
+        '''Enable an importer extension in this ImportLoop instance.
+
+        At least one importer extension must be enabled for the loop to do
+        anything.
+
+        Enabling more than one extension is handy for packaging systems which
+        can list dependencies in other package universes: for example, Omnibus
+        software components can depend on other Omnibus software components,
+        but also on RubyGems.
+
+        '''
         assert kind not in self.importers
         self.importers[kind] = {
             'extra_args': extra_args
@@ -134,6 +160,7 @@ class ImportLoop(object):
 
     def run(self):
         '''Process the goal package and all of its dependencies.'''
+
         start_time = time.time()
         start_displaytime = time.strftime('%x %X %Z', time.localtime())
 
@@ -152,9 +179,18 @@ class ImportLoop(object):
         goal = baserockimport.package.Package(
             self.goal_kind, self.goal_name, self.goal_version)
         to_process = [goal]
+
+        # Every Package object is added as a node in the 'processed' graph.
+        # The set of nodes in graph corresponds to the set of packages needed
+        # at runtime for the goal package to function. The edges in the graph
+        # correspond to build-time dependencies between packages. This format
+        # is convenient when we need to construct a suitable stratum morphology
+        # for the goal package.
         processed = networkx.DiGraph()
 
         errors = {}
+
+        # This is the main processing loop of an import!
 
         while len(to_process) > 0:
             current_item = to_process.pop()
@@ -167,10 +203,8 @@ class ImportLoop(object):
                 errors[current_item] = e
                 error = True
 
-            processed.add_node(current_item)
-
             if not error:
-                self._process_dependencies(
+                self._update_queue_and_graph(
                     current_item, current_item.dependencies, to_process,
                     processed)
 
@@ -191,9 +225,13 @@ class ImportLoop(object):
             self.goal_kind, self.goal_name, duration)
 
     def _process_package(self, package):
+        '''Process a single package.'''
+
         kind = package.kind
         name = package.name
         version = package.version
+
+        # 1. Make the source code available.
 
         lorry = self._find_or_create_lorry_file(kind, name)
         source_repo, url = self._fetch_or_update_source(lorry)
@@ -201,6 +239,8 @@ class ImportLoop(object):
         checked_out_version, ref = self._checkout_source_version(
             source_repo, name, version)
         package.set_version_in_use(checked_out_version)
+
+        # 2. Create a chunk morphology with build instructions.
 
         chunk_morph = self._find_or_create_chunk_morph(
             kind, name, checked_out_version, source_repo, url, ref)
@@ -213,54 +253,55 @@ class ImportLoop(object):
 
         package.set_morphology(chunk_morph)
 
+        # 3. Calculate the dependencies of this package.
+
         dependencies = self._find_or_create_dependency_list(
             kind, name, checked_out_version, source_repo)
 
         package.set_dependencies(dependencies)
 
-    def _process_dependencies(self, current_item, dependencies, to_process,
-                              processed):
-        '''Enqueue all dependencies of a package that are yet to be processed.
+    def _update_queue_and_graph(self, current_item, dependencies, to_process,
+                                processed):
+        '''Mark current_item as processed and enqueue any new dependencies.'''
 
-        '''
-        for key, value in dependencies.iteritems():
-            kind = key
+        processed.add_node(current_item)
 
-            self._process_dependency_list(
-                current_item, kind, value['build-dependencies'], to_process,
-                processed, True)
-            self._process_dependency_list(
-                current_item, kind, value['runtime-dependencies'], to_process,
-                processed, False)
+        for kind, kind_deps in dependencies.iteritems():
 
-    def _process_dependency_list(self, current_item, kind, deps, to_process,
-                                 processed, these_are_build_deps):
-        # All deps are added as nodes to the 'processed' graph. Runtime
-        # dependencies only need to appear in the stratum, but build
-        # dependencies have ordering constraints, so we add edges in
-        # the graph for build-dependencies too.
+            build_deps = kind_deps['build-dependencies']
+            for name, version in build_deps.iteritems():
+                self._update_queue_and_graph_with_dependency(
+                    current_item, kind, name, version, True, to_process,
+                    processed)
 
-        for dep_name, dep_version in deps.iteritems():
-            dep_package = find(
-                processed, lambda i: i.match(dep_name, dep_version))
+            runtime_deps = kind_deps['runtime-dependencies']
+            for name, version in runtime_deps.iteritems():
+                self._update_queue_and_graph_with_dependency(
+                    current_item, kind, name, version, False, to_process,
+                    processed)
 
-            if dep_package is None:
-                # Not yet processed
-                queue_item = find(
-                    to_process, lambda i: i.match(dep_name, dep_version))
-                if queue_item is None:
-                    queue_item = baserockimport.package.Package(
-                        kind, dep_name, dep_version)
-                    to_process.append(queue_item)
-                dep_package = queue_item
+    def _update_queue_and_graph_with_dependency(self, current_item, kind, name,
+                                                version, is_build_dep,
+                                                to_process, processed):
+        dep_package = find(
+            processed, lambda i: i.match(name, version))
 
-            dep_package.add_required_by(current_item)
+        if dep_package is None:
+            # Not yet processed
+            queue_item = find(
+                to_process, lambda i: i.match(name, version))
+            if queue_item is None:
+                queue_item = baserockimport.package.Package(
+                    kind, name, version)
+                to_process.append(queue_item)
+            dep_package = queue_item
 
-            if these_are_build_deps or current_item.is_build_dep:
-                # A runtime dep of a build dep becomes a build dep
-                # itself.
-                dep_package.set_is_build_dep(True)
-                processed.add_edge(dep_package, current_item)
+        dep_package.add_required_by(current_item)
+
+        if is_build_dep or current_item.is_build_dep:
+            # A runtime dep of a build dep becomes a build dep itself.
+            dep_package.set_is_build_dep(True)
+            processed.add_edge(dep_package, current_item)
 
     def _find_or_create_lorry_file(self, kind, name):
         # Note that the lorry file may already exist for 'name', but lorry
