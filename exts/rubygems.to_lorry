@@ -78,7 +78,7 @@ class RubyGemLorryGenerator(ImportExtension):
     def process_args(self, args):
         if len(args) != 1:
             raise ImportException(
-                'Please call me with the name of a RubyGem as an argument.\n')
+                'Please call me with the name of a RubyGem as an argument.')
 
         gem_name = args[0]
 
