@@ -38,8 +38,8 @@ class Omnibus::Builder
     def gemspec_path(args)
       handle_options args
       if options[:args].length != 1
-        raise Exception, "Invalid `gem build` commandline: 1 argument " +
-                         "expected, got #{options[:args]}."
+        raise "Invalid `gem build` commandline: 1 argument expected, got " \
+               "#{options[:args]}."
       end
       options[:args][0]
     end
@@ -67,11 +67,10 @@ class Omnibus::Builder
       parser = GemBuildCommandParser.new
       args = Shellwords.split(command).drop(1)
       if built_gemspec != nil
-        raise Exception, "More than one `gem build` command was run as part " +
-                         "of the build process. The 'rubygems.to_chunk' " +
-                         "program currently supports only one .gemspec " +
-                         "build per chunk, so this can't be processed " +
-                         "automatically."
+        raise "More than one `gem build` command was run as part f the build " \
+              "process. The 'rubygems.to_chunk' program currently supports " \
+              "only one .gemspec build per chunk, so this can't be " \
+              "processed automatically."
       end
       @built_gemspec = parser.gemspec_path(args)
     elsif command.start_with? 'install'

@@ -121,7 +121,7 @@ class RubyGemChunkMorphologyGenerator < Importer::Base
       # control the build and deployment environment, and we obviously can't
       # provide the private key of the Gem's maintainer.
       configure_commands <<
-        "sed -e '/cert_chain\\s*=/d' -e '/signing_key\\s*=/d' -i " +
+        "sed -e '/cert_chain\\s*=/d' -e '/signing_key\\s*=/d' -i " \
         "#{spec.name}.gemspec"
     end
 
@@ -131,7 +131,7 @@ class RubyGemChunkMorphologyGenerator < Importer::Base
 
     install_commands = [
       "mkdir -p #{gem_dir}",
-      "gem install --install-dir #{gem_dir} --bindir #{bin_dir} " +
+      "gem install --install-dir #{gem_dir} --bindir #{bin_dir} " \
         "--ignore-dependencies --local ./#{spec.full_name}.gem"
     ]
 
@@ -150,7 +150,7 @@ class RubyGemChunkMorphologyGenerator < Importer::Base
   def run
     source_dir_name, gem_name, expected_version = parse_options(ARGV)
 
-    log.info("Creating chunk morph for #{gem_name} based on " +
+    log.info("Creating chunk morph for #{gem_name} based on " \
              "source code in #{source_dir_name}")
 
     resolved_specs = Dir.chdir(source_dir_name) do

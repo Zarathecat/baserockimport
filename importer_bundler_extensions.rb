@@ -53,11 +53,9 @@ module Importer
     def get_spec_for_gem(specs, gem_name)
       found = specs[gem_name].select {|s| Gem::Platform.match(s.platform)}
       if found.empty?
-        raise Exception,
-          "No Gemspecs found matching '#{gem_name}'"
+        raise "No Gemspecs found matching '#{gem_name}'"
       elsif found.length != 1
-        raise Exception,
-          "Unsure which Gem to use for #{gem_name}, got #{found}"
+        raise "Unsure which Gem to use for #{gem_name}, got #{found}"
       end
       found[0]
     end
@@ -71,7 +69,7 @@ module Importer
 
     def validate_spec(spec, source_dir_name, expected_version)
       if not spec_is_from_current_source_tree(spec, source_dir_name)
-        error "Specified gem '#{spec.name}' doesn't live in the source in " +
+        error "Specified gem '#{spec.name}' doesn't live in the source in " \
               "'#{source_dir_name}'"
         log.debug "SPEC: #{spec.inspect} #{spec.source}"
         exit 1
@@ -80,7 +78,7 @@ module Importer
       if expected_version != nil && spec.version != expected_version
         # This check is brought to you by Coderay, which changes its version
         # number based on an environment variable. Other Gems may do this too.
-        error "Source in #{source_dir_name} produces #{spec.full_name}, but " +
+        error "Source in #{source_dir_name} produces #{spec.full_name}, but " \
               "the expected version was #{expected_version}."
         exit 1
       end

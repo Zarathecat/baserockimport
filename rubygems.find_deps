@@ -70,8 +70,8 @@ class RubyGemDependencyFinder < Importer::Base
   def run
     source_dir_name, gem_name, expected_version = parse_options(ARGV)
 
-    log.info("Finding dependencies for #{gem_name} based on " +
-             "source code in #{source_dir_name}")
+    log.info("Finding dependencies for #{gem_name} based on source code in " \
+             "#{source_dir_name}")
 
     resolved_specs = Dir.chdir(source_dir_name) do
       definition = create_bundler_definition_for_gemspec(gem_name)
