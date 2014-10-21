@@ -51,7 +51,7 @@ module Importer
       # Return the path to 'file' relative to the currently running program.
       # Used as a simple mechanism of finding local data files.
       script_dir = File.dirname(__FILE__)
-      File.join(script_dir, file)
+      File.join(script_dir, '..', 'data', file)
     end
 
     def write_lorry(file, lorry)

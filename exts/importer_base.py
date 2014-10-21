@@ -64,6 +64,11 @@ class ImportExtension(object):
     def process_args(self, args):
         raise NotImplementedError()
 
+    def local_data_path(self, filename):
+        '''Return path to 'file' inside the package data/ directory. '''
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+        return os.path.join(script_dir, '..', 'data', filename)
+
     def run(self):
         try:
             self.process_args(sys.argv[1:])

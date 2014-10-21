@@ -82,9 +82,11 @@ def run_extension(filename, args, cwd='.'):
         report_logger=report_extension_logger,
     )
 
-    # There are better ways of doing this, but it works for now.
-    main_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    extension_path = os.path.join(main_path, filename)
+    def extensions_dir():
+        module_dir = os.path.dirname(baserockimport.__file__)
+        return os.path.join(module_dir, '..', 'exts')
+
+    extension_path = os.path.join(extensions_dir(), filename)
 
     logging.debug("Running %s %s with cwd %s" % (extension_path, args, cwd))
     returncode = ext.run(extension_path, args, cwd, os.environ)
