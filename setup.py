@@ -36,7 +36,7 @@ setup(name='baserockimport',
       author='Codethink Limited',
       author_email='baserock-dev@baserock.org',
       url='http://www.baserock.org',
-      scripts=['baserock-import.py'],
+      scripts=['baserock-import'],
       packages=['baserockimport'],
       package_data={
           'baserockimport': [
