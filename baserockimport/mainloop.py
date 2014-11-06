@@ -27,32 +27,6 @@ import time
 import baserockimport
 
 
-class GitDirectory(morphlib.gitdir.GitDirectory):
-    def __init__(self, dirname):
-        super(GitDirectory, self).__init__(dirname)
-
-        # Work around strange/unintentional behaviour in GitDirectory class
-        # when 'repopath' isn't a Git repo. If 'repopath' is contained
-        # within a Git repo then the GitDirectory will traverse up to the
-        # parent repo, which isn't what we want in this case.
-        #
-        # FIXME: this should be a change to the base class, which should take
-        # a flag at construct time saying 'traverse_upwards_to_find_root' or
-        # some such.
-        if self.dirname != dirname:
-            logging.error(
-                'Got git directory %s for %s!', self.dirname, dirname)
-            raise cliapp.AppException(
-                '%s is not the root of a Git repository' % dirname)
-
-    def has_ref(self, ref):
-        try:
-            self._rev_parse(ref)
-            return True
-        except morphlib.gitdir.InvalidRefError:
-            return False
-
-
 class BaserockImportException(cliapp.AppException):
     pass
 
@@ -413,7 +387,7 @@ class ImportLoop(object):
         ]
 
         for tag_name in possible_names:
-            if source_repo.has_ref(tag_name):
+            if source_repo.ref_exists(tag_name):
                 source_repo.checkout(tag_name)
                 ref = tag_name
                 break
