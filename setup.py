@@ -18,6 +18,29 @@
 
 
 from distutils.core import setup
+from distutils.command.build import build
+
+import os
+import os.path
+import stat
+
+
+class GenerateResources(build):
+
+    def run(self):
+        build.run(self)
+
+        # Set exec permissions on import extensions.
+        for dirname, subdirs, basenames in os.walk('baserockimport/exts'):
+            for basename in basenames:
+                orig = os.path.join(dirname, basename)
+                built = os.path.join('build/lib', dirname, basename)
+                st = os.lstat(orig)
+                bits = (st.st_mode &
+                        (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
+                if bits != 0:
+                    st2 = os.lstat(built)
+                    os.chmod(built, st2.st_mode | bits)
 
 
 setup(name='baserockimport',
@@ -44,4 +67,7 @@ setup(name='baserockimport',
               'exts/*',
           ]
       },
+      cmdclass={
+        'build': GenerateResources,
+      }
 )
