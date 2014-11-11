@@ -41,24 +41,12 @@ class MorphologySetOnDisk(morphlib.morphset.MorphologySet):
             self.load_all_morphologies()
         else:
             os.makedirs(path)
+            morphlib.gitdir.init(path)
 
     def load_all_morphologies(self):
         logging.info('Loading all .morph files under %s', self.path)
 
-        class FakeGitDir(morphlib.gitdir.GitDirectory):
-            '''FIXME: Ugh
-
-            This is here because the default constructor will search up the
-            directory heirarchy until it finds a '.git' directory, but that
-            may be totally the wrong place for our purpose: we don't have a
-            Git directory at all.
-
-            '''
-            def __init__(self, path):
-                self.dirname = path
-                self._config = {}
-
-        gitdir = FakeGitDir(self.path)
+        gitdir = morphlib.gitdir.GitDirectory(self.path)
         finder = morphlib.morphologyfinder.MorphologyFinder(gitdir)
         for filename in (f for f in finder.list_morphologies()
                          if not gitdir.is_symlink(f)):

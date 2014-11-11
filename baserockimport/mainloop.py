@@ -362,7 +362,7 @@ class ImportLoop(object):
                 self._run_lorry(lorry)
 
             if os.path.exists(checkoutpath):
-                repo = GitDirectory(checkoutpath)
+                repo = morphlib.gitdir.GitDirectory(checkoutpath)
                 repo.update_remotes()
             else:
                 if already_lorried:
@@ -370,7 +370,7 @@ class ImportLoop(object):
                         'Expected %s to exist, but will recreate it',
                         checkoutpath)
                 cliapp.runcmd(['git', 'clone', repopath, checkoutpath])
-                repo = GitDirectory(checkoutpath)
+                repo = morphlib.gitdir.GitDirectory(checkoutpath)
         except cliapp.AppException as e:
             raise BaserockImportException(e.msg.rstrip())
 
