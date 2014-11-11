@@ -40,6 +40,7 @@ setup(name='baserockimport',
       packages=['baserockimport'],
       package_data={
           'baserockimport': [
+              'data/*',
               'exts/*',
           ]
       },

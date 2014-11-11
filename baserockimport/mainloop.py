@@ -71,7 +71,7 @@ def run_extension(filename, args):
 
     def extensions_dir():
         module_dir = os.path.dirname(baserockimport.__file__)
-        return os.path.join(module_dir, '..', 'exts')
+        return os.path.join(module_dir, 'exts')
 
     extension_path = os.path.join(extensions_dir(), filename)
 
