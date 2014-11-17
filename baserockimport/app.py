@@ -131,10 +131,8 @@ class BaserockImportApplication(cliapp.Application):
             # directory. That messes up any relative paths the user may have
             # passed on the commandline, so we do a bit of a hack to change
             # back to the original directory inside the `bundle exec` process.
-            subshell_command = "(cd %s; exec python %s)" % \
-                (pipes.quote(directory), ' '.join(map(pipes.quote, args)))
-            shell_command = "sh -c %s" % pipes.quote(subshell_command)
-            return shell_command
+            return "cd %s; exec python %s" % (
+                pipes.quote(directory), ' '.join(map(pipes.quote, args)))
 
         def reexecute_self_with_bundler(path):
             script = sys.argv[0]

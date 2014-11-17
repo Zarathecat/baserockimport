@@ -327,17 +327,14 @@ class ImportLoop(object):
         return lorry
 
     def _run_lorry(self, lorry):
-        f = tempfile.NamedTemporaryFile(delete=False)
-        try:
+        with tempfile.NamedTemporaryFile() as f:
             logging.debug(json.dumps(lorry))
             json.dump(lorry, f)
-            f.close()
+            f.flush()
             cliapp.runcmd([
                 'lorry', '--working-area',
                 self.app.settings['lorry-working-dir'], '--pull-only',
                 '--bundle', 'never', '--tarball', 'never', f.name])
-        finally:
-            os.unlink(f.name)
 
     def _fetch_or_update_source(self, lorry):
         assert len(lorry) == 1
@@ -574,7 +571,6 @@ class ImportLoop(object):
             'chunks': chunk_entries,
         }
 
-        morphology = self.morphloader.load_from_string(
-            json.dumps(stratum), filename=filename)
-        self.morphloader.unset_defaults(morphology)
+        morphology = self.morphology.Morphology(stratum)
+        morphology.filename = filename
         self.morphloader.save_to_file(filename, morphology)

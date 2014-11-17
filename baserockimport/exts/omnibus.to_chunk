@@ -51,8 +51,8 @@ class OmnibusChunkMorphologyGenerator < Importer::Base
   end
 
   def run_tool_capture_output(tool_name, *args)
-    scripts_dir = local_data_path('.')
-    tool_path = local_data_path(tool_name)
+    scripts_dir = File.dirname(__FILE__)
+    tool_path = File.join(scripts_dir, tool_name)
 
     # FIXME: something breaks when we try to share this FD, it's not
     # ideal that the subprocess doesn't log anything, though.
