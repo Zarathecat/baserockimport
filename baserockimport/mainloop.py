@@ -571,7 +571,6 @@ class ImportLoop(object):
             'chunks': chunk_entries,
         }
 
-        morphology = self.morphloader.load_from_string(
-            json.dumps(stratum), filename=filename)
-        self.morphloader.unset_defaults(morphology)
+        morphology = self.morphology.Morphology(stratum)
+        morphology.filename = filename
         self.morphloader.save_to_file(filename, morphology)
