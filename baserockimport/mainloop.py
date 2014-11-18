@@ -545,9 +545,16 @@ class ImportLoop(object):
                 dep_package = find(graph, lambda p: p.match(name, version))
                 return '%s-%s' % (name, dep_package.version_in_use)
 
+            def get_build_deps(morphology):
+                deps = dict()
+                for kind in self.importers:
+                    field = 'x-build-dependencies-%s' % kind
+                    deps.update(morphology.get(field, []))
+                return deps
+
             build_depends = [
                 format_build_dep(name, version) for name, version in
-                m['x-build-dependencies-rubygems'].iteritems()
+                get_build_deps(m).iteritems()
             ]
 
             entry = {
