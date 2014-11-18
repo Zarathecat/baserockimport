@@ -571,6 +571,6 @@ class ImportLoop(object):
             'chunks': chunk_entries,
         }
 
-        morphology = self.morphology.Morphology(stratum)
+        morphology = morphlib.morphology.Morphology(stratum)
         morphology.filename = filename
         self.morphloader.save_to_file(filename, morphology)
