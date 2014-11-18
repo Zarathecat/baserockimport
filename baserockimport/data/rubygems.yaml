@@ -8,9 +8,10 @@ lorry-prefix: ruby-gems/
 # tools because of the number of circular dependencies. Instead, only those
 # tools which are known to be required at Gem build time are listed as
 # build-dependencies, and any other :development dependencies are ignored.
-build-dependency-whitelist:
-  - hoe
+build-dependency-whitelist: []
   # rake is bundled with Ruby, so it is not included in the whitelist.
+  # hoe is included in the 'ruby' stratum
+  # rake-compiler is included in the 'ruby' stratum
 
 # The following Gems don't provide a source_code_uri in their Gem metadata.
 # Ideally ... they would do.
