@@ -10,8 +10,10 @@ First, clone the Git repository corresponding to the Omnibus project you want
 to import. For example, if you want to import the Chef Server, clone:
 <https://github.com/opscode/omnibus-chef-server>
 
-As per Omnibus' instructions, you should then run `bundle install --binstubs`
-in the checkout to make available the various dependent repos and Gems of the
-project definitions.
-
-
+You should then run `bundle install --binstubs --deployment` in the checkout to
+make available the various dependent repos and Gems of the project definitions.
+The Omnibus documentation recommends running this without the `--deployment`
+flag, but I recommend that you use this flag so that all the Gems are in the
+local repo (in the vendor/cache directory) and not installed into /usr on the
+host. That way your work is independent of the system and won't break if you
+upgrade or if /usr is read-only.
