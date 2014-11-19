@@ -182,14 +182,7 @@ class ImportLoop(object):
                     current_item, current_item.dependencies, to_process,
                     processed)
 
-        if len(errors) > 0:
-            self.app.status(
-                '\nErrors encountered, not generating a stratum morphology.')
-            self.app.status(
-                'See the README files for guidance.')
-        else:
-            self._generate_stratum_morph_if_none_exists(
-                processed, self.goal_name)
+        self._maybe_generate_stratum(processed, errors, self.goal_name)
 
         duration = time.time() - start_time
         end_displaytime = time.strftime('%x %X %Z', time.localtime())
@@ -520,26 +513,43 @@ class ImportLoop(object):
                 'One or more cycles detected in build graph: %s' %
                 (', '.join(all_loops_str)))
 
-    def _generate_stratum_morph_if_none_exists(self, graph, goal_name):
+    def _maybe_generate_stratum(self, graph, errors, goal_name):
         filename = os.path.join(
             self.app.settings['definitions-dir'], 'strata', '%s.morph' %
             goal_name)
+        update_existing = self.app.settings['update-existing']
 
-        if os.path.exists(filename):
-            if not self.app.settings['update-existing']:
-                self.app.status(
-                    msg='Found stratum morph for %s at %s, not overwriting' %
-                    (goal_name, filename))
-                return
+        if self.app.settings['force-stratum-generation']:
+            self._generate_stratum(
+                graph, goal_name, filename, ignore_errors=True)
+        elif len(errors) > 0:
+            self.app.status(
+                '\nErrors encountered, not generating a stratum morphology.')
+            self.app.status(
+                'See the README files for guidance.')
+        elif os.path.exists(filename) and not update_existing:
+            self.app.status(
+                msg='Found stratum morph for %s at %s, not overwriting' %
+                (goal_name, filename))
+        else:
+            self._generate_stratum(graph, goal_name, filename)
 
+    def _generate_stratum(self, graph, goal_name, filename,
+                          ignore_errors=False):
         self.app.status(msg='Generating stratum morph for %s' % goal_name)
 
         chunk_entries = []
 
         for package in self._sort_chunks_by_build_order(graph):
             m = package.morphology
+
             if m is None:
-                raise cliapp.AppException('No morphology for %s' % package)
+                if ignore_errors:
+                    logging.warn(
+                        'Ignoring %s because there is no chunk morphology.')
+                    continue
+                else:
+                    raise cliapp.AppException('No morphology for %s' % package)
 
             def format_build_dep(name, version):
                 dep_package = find(graph, lambda p: p.match(name, version))

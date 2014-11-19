@@ -44,6 +44,11 @@ class BaserockImportApplication(cliapp.Application):
                              metavar="PATH",
                              default=os.path.abspath('./lorry-working-dir'))
 
+        self.settings.boolean(['force-stratum-generation', 'force-stratum'],
+                              "always create a stratum, overwriting any "
+                              "existing stratum morphology, and ignoring any "
+                              "components where errors occurred during import",
+                              default=False)
         self.settings.boolean(['update-existing'],
                               "update all the checked-out Git trees and "
                               "generated definitions",
