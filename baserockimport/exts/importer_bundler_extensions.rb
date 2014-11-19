@@ -28,7 +28,7 @@ end
 
 module Importer
   module BundlerExtensions
-    def create_bundler_definition_for_gemspec(gem_name)
+    def create_bundler_definition_for_gemspec(gem_name, path)
       # Using the real Gemfile doesn't get great results, because people can put
       # lots of stuff in there that is handy for developers to have but
       # irrelevant if you just want to produce a .gem. Also, there is only one
@@ -41,7 +41,8 @@ module Importer
       fake_gemfile = Bundler::Dsl.new
       fake_gemfile.source('https://rubygems.org')
       begin
-        fake_gemfile.gemspec({:name => gem_name})
+        fake_gemfile.gemspec({:name => gem_name,
+                              :path => path})
       rescue Bundler::InvalidOption
         error "Did not find #{gem_name}.gemspec in current directory."
         exit 1
