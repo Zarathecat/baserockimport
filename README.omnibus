@@ -10,10 +10,42 @@ First, clone the Git repository corresponding to the Omnibus project you want
 to import. For example, if you want to import the Chef Server, clone:
 <https://github.com/opscode/omnibus-chef-server>
 
-You should then run `bundle install --binstubs --deployment` in the checkout to
-make available the various dependent repos and Gems of the project definitions.
-The Omnibus documentation recommends running this without the `--deployment`
-flag, but I recommend that you use this flag so that all the Gems are in the
-local repo (in the vendor/cache directory) and not installed into /usr on the
-host. That way your work is independent of the system and won't break if you
-upgrade or if /usr is read-only.
+You should then run `bundle install --binstubs --path=~/.gem/ruby/2.0.0` in the
+checkout to make available the various dependent repos and Gems of the project
+definitions.
+
+The extra '--path' flag is needed because currently in Baserock you'll be
+running as the 'root' user, which Bundler and Gem will take as a sign to
+install the Gems it installs into /usr. It's not recommended to manually
+install stuff into /usr in Baserock systems: it makes it harder to reason
+about their provenance and behaviour, the changes will not persist across
+system upgrades, and it will probably not be possible in future (even as
+'root').  By installing the Gems into your home directory (as would happen
+if you ran Bundler as non-root) you avoid these issues.
+
+Omnibus packaging often includes components which already exist in other
+Baserock strata. You will need to resolve this manually after running the
+import tool. If you find that the import is failing to generate a stratum
+because of errors in some components that you're not going to use anyway,
+you can use the `--force-stratum-generation` flag to ignore those errors
+and get on with the integration.
+
+Errors you might see
+--------------------
+
+If you see errors from Bundler itself about missing Gems, such as this one:
+
+    rubygems.to_chunk failed with code 1: /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler/spec_set.rb:92:in `block in materialize': Could not find addressable-2.3.6 in any of the sources (Bundler::GemNotFound)
+        from /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler/spec_set.rb:85:in `map!'
+        from /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler/spec_set.rb:85:in `materialize'
+        from /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler/definition.rb:133:in `specs'
+        from /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler/definition.rb:178:in `specs_for'
+        from /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler/definition.rb:167:in `requested_specs'
+        from /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler/environment.rb:18:in `requested_specs'
+        from /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler/runtime.rb:13:in `setup'
+        from /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler.rb:120:in `setup'
+        from /usr/lib/ruby/gems/2.0.0/gems/bundler-1.6.2/lib/bundler/setup.rb:17:in `<top (required)>'
+        from /usr/lib/ruby/2.0.0/rubygems/core_ext/kernel_require.rb:55:in `require'
+        from /usr/lib/ruby/2.0.0/rubygems/core_ext/kernel_require.rb:55:in `require'
+
+Try rerunning the Bundler `install` command as described above.
