@@ -203,8 +203,8 @@ class ImportLoop(object):
         lorry = self._find_or_create_lorry_file(kind, name)
         source_repo, url = self._fetch_or_update_source(lorry)
 
-        checked_out_version, ref = self._checkout_source_version(
-            source_repo, name, version)
+        checked_out_version, ref = self._checkout_source_version_for_package(
+            source_repo, package)
         package.set_version_in_use(checked_out_version)
 
         # 2. Create a chunk morphology with build instructions.
@@ -366,9 +366,11 @@ class ImportLoop(object):
 
         return repo, url
 
-    def _checkout_source_version(self, source_repo, name, version):
+    def _checkout_source_version_for_package(self, source_repo, package):
         # FIXME: we need to be a bit smarter than this. Right now we assume
         # that 'version' is a valid Git ref.
+        name = package.name
+        version = package.version
 
         possible_names = [
             version,
@@ -390,7 +392,7 @@ class ImportLoop(object):
                 ref = version = 'master'
             else:
                 raise BaserockImportException(
-                    'Could not find ref for %s version %s.' % (name, version))
+                    'Could not find ref for %s.' % package)
 
         return version, ref
 
