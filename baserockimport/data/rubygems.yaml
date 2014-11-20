@@ -8,9 +8,24 @@ lorry-prefix: ruby-gems/
 # tools because of the number of circular dependencies. Instead, only those
 # tools which are known to be required at Gem build time are listed as
 # build-dependencies, and any other :development dependencies are ignored.
-build-dependency-whitelist:
+#
+# This list is currently empty, because everything that was in it has been
+# added to the 'ruby' stratum and so is present implicitly.
+build-dependency-whitelist: []
+
+# List of Gems which are built into Ruby or included in the 'ruby' stratum
+# in http://git.baserock.org/cgi-bin/cgit.cgi/baserock/baserock/definitions.git
+#
+# This doesn't take the versions that are provided into account (and it'd be
+# quite a maintenance burden if it did). Thus it's not an ideal solution, as
+# something may for example depend on Rake 4.9 when Rake 2.0 is actually the
+# only thing available and this won't be noticed until the user tries to build
+# the generated definitions.
+ignore-list:
+  - bundler
   - hoe
-  # rake is bundled with Ruby, so it is not included in the whitelist.
+  - rake
+  - rake-compiler
 
 # The following Gems don't provide a source_code_uri in their Gem metadata.
 # Ideally ... they would do.

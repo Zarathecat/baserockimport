@@ -36,6 +36,7 @@ class RubyGemDependencyFinder < Importer::Base
   def initialize
     local_data = YAML.load_file(local_data_path("rubygems.yaml"))
     @build_dependency_whitelist = local_data['build-dependency-whitelist']
+    @ignore_list = local_data['ignore-list']
   end
 
   def parse_options(arguments)
@@ -64,7 +65,9 @@ class RubyGemDependencyFinder < Importer::Base
   end
 
   def runtime_deps_for_gem(spec)
-    spec.dependencies.select {|d| d.type == :runtime}
+    spec.dependencies.select do |d|
+      d.type == :runtime && ! @ignore_list.member?(d.name)
+    end
   end
 
   def run
@@ -74,7 +77,7 @@ class RubyGemDependencyFinder < Importer::Base
              "#{source_dir_name}")
 
     resolved_specs = Dir.chdir(source_dir_name) do
-      definition = create_bundler_definition_for_gemspec(gem_name)
+      definition = create_bundler_definition_for_gemspec(gem_name, source_dir_name)
       definition.resolve_remotely!
     end
 

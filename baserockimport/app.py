@@ -44,6 +44,11 @@ class BaserockImportApplication(cliapp.Application):
                              metavar="PATH",
                              default=os.path.abspath('./lorry-working-dir'))
 
+        self.settings.boolean(['force-stratum-generation', 'force-stratum'],
+                              "always create a stratum, overwriting any "
+                              "existing stratum morphology, and ignoring any "
+                              "components where errors occurred during import",
+                              default=False)
         self.settings.boolean(['update-existing'],
                               "update all the checked-out Git trees and "
                               "generated definitions",
@@ -76,7 +81,7 @@ class BaserockImportApplication(cliapp.Application):
         self.add_subcommand('omnibus', self.import_omnibus,
                             arg_synopsis='REPO PROJECT_NAME SOFTWARE_NAME')
         self.add_subcommand('rubygems', self.import_rubygems,
-                            arg_synopsis='GEM_NAME')
+                            arg_synopsis='GEM_NAME [GEM_VERSION]')
 
         self.stdout_has_colours = self._stream_has_colours(sys.stdout)
 
@@ -165,12 +170,16 @@ class BaserockImportApplication(cliapp.Application):
 
     def import_rubygems(self, args):
         '''Import one or more RubyGems.'''
-        if len(args) != 1:
+        if len(args) not in [1, 2]:
             raise cliapp.AppException(
-                'Please pass the name of a RubyGem on the commandline.')
+                'Please pass the name and version of a RubyGem on the '
+                'commandline.')
+
+        goal_name = args[0]
+        goal_version = args[1] if len(args) == 2 else 'master'
 
         loop = baserockimport.mainloop.ImportLoop(
             app=self,
-            goal_kind='rubygems', goal_name=args[0], goal_version='master')
+            goal_kind='rubygems', goal_name=goal_name, goal_version=goal_version)
         loop.enable_importer('rubygems')
         loop.run()

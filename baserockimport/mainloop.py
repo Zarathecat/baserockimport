@@ -182,14 +182,7 @@ class ImportLoop(object):
                     current_item, current_item.dependencies, to_process,
                     processed)
 
-        if len(errors) > 0:
-            self.app.status(
-                '\nErrors encountered, not generating a stratum morphology.')
-            self.app.status(
-                'See the README files for guidance.')
-        else:
-            self._generate_stratum_morph_if_none_exists(
-                processed, self.goal_name)
+        self._maybe_generate_stratum(processed, errors, self.goal_name)
 
         duration = time.time() - start_time
         end_displaytime = time.strftime('%x %X %Z', time.localtime())
@@ -210,9 +203,18 @@ class ImportLoop(object):
         lorry = self._find_or_create_lorry_file(kind, name)
         source_repo, url = self._fetch_or_update_source(lorry)
 
-        checked_out_version, ref = self._checkout_source_version(
-            source_repo, name, version)
+        checked_out_version, ref = self._checkout_source_version_for_package(
+            source_repo, package)
         package.set_version_in_use(checked_out_version)
+
+        repo_path = os.path.relpath(source_repo.dirname)
+        if morphlib.git.is_valid_sha1(ref):
+            self.app.status(
+                "%s %s: using %s commit %s", name, version, repo_path, ref)
+        else:
+            self.app.status(
+                "%s %s: using %s ref %s (commit %s)", name, version, repo_path,
+                ref, source_repo.resolve_ref_to_commit(ref))
 
         # 2. Create a chunk morphology with build instructions.
 
@@ -317,7 +319,8 @@ class ImportLoop(object):
         if kind not in self.importers:
             raise Exception('Importer for %s was not enabled.' % kind)
         extra_args = self.importers[kind]['extra_args']
-        self.app.status('Calling %s to generate lorry for %s', tool, name)
+        self.app.status(
+            '%s: calling %s to generate lorry', name, tool)
         lorry_text = run_extension(tool, extra_args + [name])
         try:
             lorry = json.loads(lorry_text)
@@ -373,9 +376,11 @@ class ImportLoop(object):
 
         return repo, url
 
-    def _checkout_source_version(self, source_repo, name, version):
+    def _checkout_source_version_for_package(self, source_repo, package):
         # FIXME: we need to be a bit smarter than this. Right now we assume
         # that 'version' is a valid Git ref.
+        name = package.name
+        version = package.version
 
         possible_names = [
             version,
@@ -397,7 +402,7 @@ class ImportLoop(object):
                 ref = version = 'master'
             else:
                 raise BaserockImportException(
-                    'Could not find ref for %s version %s.' % (name, version))
+                    'Could not find ref for %s.' % package)
 
         return version, ref
 
@@ -449,8 +454,7 @@ class ImportLoop(object):
         extra_args = self.importers[kind]['extra_args']
 
         self.app.status(
-            'Calling %s to generate chunk morph for %s %s', tool, name,
-            version)
+            '%s %s: calling %s to generate chunk morph', name, version, tool)
 
         args = extra_args + [source_repo.dirname, name]
         if version != 'master':
@@ -493,8 +497,7 @@ class ImportLoop(object):
         extra_args = self.importers[kind]['extra_args']
 
         self.app.status(
-            'Calling %s to calculate dependencies for %s %s', tool, name,
-            version)
+            '%s %s: calling %s to calculate dependencies', name, version, tool)
 
         args = extra_args + [source_repo.dirname, name]
         if version != 'master':
@@ -520,34 +523,58 @@ class ImportLoop(object):
                 'One or more cycles detected in build graph: %s' %
                 (', '.join(all_loops_str)))
 
-    def _generate_stratum_morph_if_none_exists(self, graph, goal_name):
+    def _maybe_generate_stratum(self, graph, errors, goal_name):
         filename = os.path.join(
             self.app.settings['definitions-dir'], 'strata', '%s.morph' %
             goal_name)
+        update_existing = self.app.settings['update-existing']
 
-        if os.path.exists(filename):
-            if not self.app.settings['update-existing']:
-                self.app.status(
-                    msg='Found stratum morph for %s at %s, not overwriting' %
-                    (goal_name, filename))
-                return
+        if self.app.settings['force-stratum-generation']:
+            self._generate_stratum(
+                graph, goal_name, filename, ignore_errors=True)
+        elif len(errors) > 0:
+            self.app.status(
+                '\nErrors encountered, not generating a stratum morphology.')
+            self.app.status(
+                'See the README files for guidance.')
+        elif os.path.exists(filename) and not update_existing:
+            self.app.status(
+                msg='Found stratum morph for %s at %s, not overwriting' %
+                (goal_name, filename))
+        else:
+            self._generate_stratum(graph, goal_name, filename)
 
+    def _generate_stratum(self, graph, goal_name, filename,
+                          ignore_errors=False):
         self.app.status(msg='Generating stratum morph for %s' % goal_name)
 
         chunk_entries = []
 
         for package in self._sort_chunks_by_build_order(graph):
             m = package.morphology
+
             if m is None:
-                raise cliapp.AppException('No morphology for %s' % package)
+                if ignore_errors:
+                    logging.warn(
+                        'Ignoring %s because there is no chunk morphology.')
+                    continue
+                else:
+                    raise cliapp.AppException('No morphology for %s' % package)
 
             def format_build_dep(name, version):
                 dep_package = find(graph, lambda p: p.match(name, version))
                 return '%s-%s' % (name, dep_package.version_in_use)
 
+            def get_build_deps(morphology):
+                deps = dict()
+                for kind in self.importers:
+                    field = 'x-build-dependencies-%s' % kind
+                    deps.update(morphology.get(field, []))
+                return deps
+
             build_depends = [
                 format_build_dep(name, version) for name, version in
-                m['x-build-dependencies-rubygems'].iteritems()
+                get_build_deps(m).iteritems()
             ]
 
             entry = {
