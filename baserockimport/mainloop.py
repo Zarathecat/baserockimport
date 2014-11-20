@@ -207,12 +207,14 @@ class ImportLoop(object):
             source_repo, package)
         package.set_version_in_use(checked_out_version)
 
-        gitdir_name = os.path.relpath(source_repo.dirname)
+        repo_path = os.path.relpath(source_repo.dirname)
         if morphlib.git.is_valid_sha1(ref):
-            self.app.status("Using %s commit %s", gitdir_name, ref)
+            self.app.status(
+                "%s %s: using %s commit %s", name, version, repo_path, ref)
         else:
-            self.app.status("Using %s ref %s (commit %s)", gitdir_name, ref,
-                            source_repo.resolve_ref_to_commit(ref))
+            self.app.status(
+                "%s %s: using %s ref %s (commit %s)", name, version, repo_path,
+                ref, source_repo.resolve_ref_to_commit(ref))
 
         # 2. Create a chunk morphology with build instructions.
 
@@ -317,7 +319,8 @@ class ImportLoop(object):
         if kind not in self.importers:
             raise Exception('Importer for %s was not enabled.' % kind)
         extra_args = self.importers[kind]['extra_args']
-        self.app.status('Calling %s to generate lorry for %s', tool, name)
+        self.app.status(
+            '%s: calling %s to generate lorry', name, tool)
         lorry_text = run_extension(tool, extra_args + [name])
         try:
             lorry = json.loads(lorry_text)
@@ -451,8 +454,7 @@ class ImportLoop(object):
         extra_args = self.importers[kind]['extra_args']
 
         self.app.status(
-            'Calling %s to generate chunk morph for %s %s', tool, name,
-            version)
+            '%s %s: calling %s to generate chunk morph', name, version, tool)
 
         args = extra_args + [source_repo.dirname, name]
         if version != 'master':
@@ -495,8 +497,7 @@ class ImportLoop(object):
         extra_args = self.importers[kind]['extra_args']
 
         self.app.status(
-            'Calling %s to calculate dependencies for %s %s', tool, name,
-            version)
+            '%s %s: calling %s to calculate dependencies', name, version, tool)
 
         args = extra_args + [source_repo.dirname, name]
         if version != 'master':
