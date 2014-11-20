@@ -207,6 +207,13 @@ class ImportLoop(object):
             source_repo, package)
         package.set_version_in_use(checked_out_version)
 
+        gitdir_name = os.path.relpath(source_repo.dirname)
+        if morphlib.git.is_valid_sha1(ref):
+            self.app.status("Using %s commit %s", gitdir_name, ref)
+        else:
+            self.app.status("Using %s ref %s (commit %s)", gitdir_name, ref,
+                            source_repo.resolve_ref_to_commit(ref))
+
         # 2. Create a chunk morphology with build instructions.
 
         chunk_morph = self._find_or_create_chunk_morph(
