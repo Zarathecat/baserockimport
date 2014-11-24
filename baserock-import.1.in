@@ -1,0 +1,82 @@
+.\" Copyright (C) 2014  Codethink Limited
+.\" 
+.\" This program is free software; you can redistribute it and/or modify
+.\" it under the terms of the GNU General Public License as published by
+.\" the Free Software Foundation; version 2 of the License.
+.\" 
+.\" This program is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\" 
+.\" You should have received a copy of the GNU General Public License along
+.\" with this program; if not, write to the Free Software Foundation, Inc.,
+.\" 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+.\"
+.TH BASEROCK-IMPORT 1
+.SH NAME
+baserock-import \- convert data from software packaging systems into Baserock definitions
+
+.SH SYNOPSIS
+.SH DESCRIPTION
+
+The tool helps you generate Baserock build instructions by importing metadata
+from a foreign packaging system.
+.PP
+The process it follows is this:
+.PP
+.TP
+1.
+Pick a package from the processing queue.
+.TP
+2.
+Find its source code, and generate a suitable .lorry file.
+.TP
+3.
+Make it available as a local Git repo.
+.TP
+4.
+Check out the commit corresponding to the requested version of the package.
+.TP
+5.
+Analyse the source tree and generate a suitable chunk .morph to build the requested package.
+.TP
+6.
+Analyse the source tree and generate a list of dependencies for the package.
+.TP
+7.
+Enqueue any new dependencies, and repeat.
+.PP
+Once the queue is empty:
+.PP
+.TP
+8.
+Generate a stratum .morph for the package(s) the user requested.
+.PP
+The tool is not magic. It can be taught the conventions for each packaging
+system, but these will not work in all cases. When an import fails it will
+continue to the next package, so that the first run does as many imports as
+possible.
+.PP
+For imports that could not be done automatically, you will need to write an
+appropriate .lorry or .morph file manually and rerun the tool. It will resume
+processing where it left off.
+.PP
+The following information can also be found in the README file in the tool's
+source repository.
+.PP
+For more details, please see the tutorial on the Baserock wiki at
+http://wiki.baserock.org/guides/import-tool-rubygems/.
+.SH OPTIONS
+.SH ENVIRONMENT
+The
+.BR cliapp (5)
+manual page has some more variables that affect
+.B baserock-import
+itself.
+.SH "SEE ALSO"
+.BR cliapp (5).
+.PP
+http://wiki.baserock.org/guides/import-tool-rubygems/
+.PP
+http://git.baserock.org/cgi-bin/cgit.cgi/baserock/baserock/import.git/tree/README

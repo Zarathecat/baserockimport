@@ -23,11 +23,14 @@ from distutils.command.build import build
 import os
 import os.path
 import stat
+import subprocess
 
 
 class GenerateResources(build):
 
     def run(self):
+        if not self.dry_run:
+            self.generate_manpages()
         build.run(self)
 
         # Set exec permissions on import extensions.
@@ -41,6 +44,14 @@ class GenerateResources(build):
                 if bits != 0:
                     st2 = os.lstat(built)
                     os.chmod(built, st2.st_mode | bits)
+
+    def generate_manpages(self):
+        self.announce('building manpage')
+        for x in ['baserock-import']:
+            with open('%s.1' % x, 'w') as f:
+                subprocess.check_call(['python', x,
+                                       '--generate-manpage=%s.1.in' % x,
+                                       '--output=%s.1' % x], stdout=f)
 
 
 setup(name='baserockimport',
