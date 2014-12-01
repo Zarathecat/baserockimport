@@ -260,19 +260,19 @@ class ImportLoop(object):
                                                 version, is_build_dep,
                                                 to_process, processed, errors):
         failed_dep_package = find(
-            errors, lambda i: i.match(name, version))
+            errors, lambda i: i.match(kind, name, version))
         if failed_dep_package:
             logging.debug(
                 "Ignoring %s as it failed earlier.", failed_dep_package)
             return
 
         dep_package = find(
-            processed, lambda i: i.match(name, version))
+            processed, lambda i: i.match(kind, name, version))
 
         if dep_package is None:
             # Not yet processed
             queue_item = find(
-                to_process, lambda i: i.match(name, version))
+                to_process, lambda i: i.match(kind, name, version))
             if queue_item is None:
                 queue_item = baserockimport.package.Package(
                     kind, name, version)
@@ -568,21 +568,20 @@ class ImportLoop(object):
                 else:
                     raise cliapp.AppException('No morphology for %s' % package)
 
-            def format_build_dep(name, version):
-                dep_package = find(graph, lambda p: p.match(name, version))
+            def format_build_dep(kind, name, version):
+                dep_package = find(
+                    graph, lambda p: p.match(kind, name, version))
                 return '%s-%s' % (name, dep_package.version_in_use)
 
-            def get_build_deps(morphology):
-                deps = dict()
-                for kind in self.importers:
-                    field = 'x-build-dependencies-%s' % kind
-                    deps.update(morphology.get(field, []))
-                return deps
+            def get_build_deps(morphology, kind):
+                field = 'x-build-dependencies-%s' % kind
+                return morphology.get(field, {})
 
-            build_depends = [
-                format_build_dep(name, version) for name, version in
-                get_build_deps(m).iteritems()
-            ]
+            build_depends = []
+            for kind in self.importers:
+                for name, version in get_build_deps(m, kind).iteritems():
+                    build_depends.extend(
+                        format_build_dep(kind, name, version))
 
             entry = {
                 'name': m['name'],

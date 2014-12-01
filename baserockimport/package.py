@@ -48,8 +48,10 @@ class Package(object):
     def add_required_by(self, item):
         self.required_by.append('%s-%s' % (item.name, item.version))
 
-    def match(self, name, version):
-        return (self.name==name and self.version==version)
+    def match(self, kind, name, version):
+        return (self.kind == kind and
+                self.name == name and
+                self.version == version)
 
     # FIXME: these accessors are useless, but I want there to be some way
     # of making it clear that some of the state of the Package object is
