@@ -180,7 +180,7 @@ class ImportLoop(object):
             if not error:
                 self._update_queue_and_graph(
                     current_item, current_item.dependencies, to_process,
-                    processed)
+                    processed, errors)
 
         self._maybe_generate_stratum(processed, errors, self.goal_name)
 
@@ -237,7 +237,7 @@ class ImportLoop(object):
         package.set_dependencies(dependencies)
 
     def _update_queue_and_graph(self, current_item, dependencies, to_process,
-                                processed):
+                                processed, errors):
         '''Mark current_item as processed and enqueue any new dependencies.'''
 
         processed.add_node(current_item)
@@ -248,17 +248,24 @@ class ImportLoop(object):
             for name, version in build_deps.iteritems():
                 self._update_queue_and_graph_with_dependency(
                     current_item, kind, name, version, True, to_process,
-                    processed)
+                    processed, errors)
 
             runtime_deps = kind_deps['runtime-dependencies']
             for name, version in runtime_deps.iteritems():
                 self._update_queue_and_graph_with_dependency(
                     current_item, kind, name, version, False, to_process,
-                    processed)
+                    processed, errors)
 
     def _update_queue_and_graph_with_dependency(self, current_item, kind, name,
                                                 version, is_build_dep,
-                                                to_process, processed):
+                                                to_process, processed, errors):
+        failed_dep_package = find(
+            errors, lambda i: i.match(name, version))
+        if failed_dep_package:
+            logging.debug(
+                "Ignoring %s as it failed earlier.", failed_dep_package)
+            return
+
         dep_package = find(
             processed, lambda i: i.match(name, version))
 
