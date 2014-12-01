@@ -14,6 +14,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
+import cliapp
 import morphlib
 import six
 
@@ -22,8 +23,16 @@ import logging
 import os
 
 
-class LorrySetError(Exception):
+class LorrySetError(cliapp.AppException):
     pass
+
+
+class DuplicateLorryError(LorrySetError):
+    def __init__(self, filename, existing_lorry_name, existing_lorry_file):
+        message = "%s: duplicates existing lorry '%s' from file %s" % (
+            os.path.relpath(filename), existing_lorry_name,
+            os.path.relpath(existing_lorry_file))
+        super(DuplicateLorryError, self).__init__(message)
 
 
 class LorrySet(object):
@@ -64,6 +73,12 @@ class LorrySet(object):
 
     def _parse_all_lorries(self):
         lorry_set = {}
+
+        # We keep track of which entry came from which file, but only while
+        # loading everything into memory (to allow us to give more helpful
+        # errors).
+        filenames = {}
+
         for lorry_file in self.all_lorry_files():
             lorry = self._parse_lorry(lorry_file)
 
@@ -71,8 +86,9 @@ class LorrySet(object):
 
             for key, value in lorry_items:
                 if key in lorry_set:
-                    raise LorrySetError(
-                        '%s: duplicates existing lorry %s' % (lorry_file, key))
+                    raise DuplicateLorryError(lorry_file, key, filenames[key])
+
+                filenames[key] = lorry_file
 
             lorry_set.update(lorry_items)
 
