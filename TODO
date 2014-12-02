@@ -1,0 +1,11 @@
+General improvements for the Baserock Import tool
+-------------------------------------------------
+
+Currently the tool hardcodes the name of each chunk morphology it generates as
+'strata/$stratumname/$chunkname-$version.morph'. This is more or less a
+workaround for some of the issues listed below.
+
+It's ugly to have the version number in every chunk name, and it makes it more
+time-consuming to do version updates of individual components in a stratum.
+The chunk name should default to '$chunkname', except when multiple versions
+of the chunk are found.

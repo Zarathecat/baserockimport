@@ -1,0 +1,22 @@
+RubyGems-specific improvements for the Baserock Import tool
+-----------------------------------------------------------
+
+If you could pass a Git ref as GEM_VERSION it might be useful. Currently you
+can't do that.
+
+The generated RubyGem chunk morphologies contain splitting rules which would
+be better built into Morph so they didn't need to be specified each time.
+
+Ideally Morph would be able to understand the normal RubyGems build system.
+Sadly the current morphlib.buildsystem code makes this a bit tricky because
+it's hard for the build system template to know the name of the .gemspec it
+should build.
+
+Currently the tool hardcodes the name of each chunk morphology it generates as
+'strata/$stratumname/$chunkname-$version.morph'. This is more or less a
+workaround for some of the issues listed below.
+
+It's ugly to have the version number in every chunk name, and it makes it more
+time-consuming to do version updates of individual components in a stratum.
+The chunk name should default to '$chunkname', except when multiple versions
+of the chunk are found.
