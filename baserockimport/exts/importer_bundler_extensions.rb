@@ -44,9 +44,7 @@ module Importer
       matches[0]
     end
 
-    def create_bundler_definition_for_gemspec(gem_name, path)
-      gemspec_file = locate_gemspec(gem_name, path)
-
+    def create_bundler_definition_for_gemspec(gem_name, gemspec_file)
       # Using the real Gemfile doesn't get great results, because people can put
       # lots of stuff in there that is handy for developers to have but
       # irrelevant if you just want to produce a .gem. Also, there is only one
