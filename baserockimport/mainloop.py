@@ -173,7 +173,7 @@ class ImportLoop(object):
                 self._process_package(current_item)
                 error = False
             except BaserockImportException as e:
-                self.app.status(str(e), error=True)
+                self.app.status('%s', e, error=True)
                 errors[current_item] = e
                 error = True
 
