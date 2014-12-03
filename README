@@ -49,14 +49,17 @@ The following field should be honoured by most packaging systems:
 Help with .lorry generation
 ---------------------------
 
-The simplest fix is to add the source to the 'known-source-uris` dict in the
-static metadata.
+The quickest fix is to write a .lorry file by hand.
 
 If you write a .lorry file by hand, be sure to fill in the `x-products-YYY`
 field. 'x' means this field is an extension to the .lorry format. YYY is the
 name of the packaging system, e.g. 'rubygems'. It should contain a list of
 which packages this repository contains the source code for.
 
+Some import extensions have a .yaml file containing 'static metadata', where
+you can hardcode URIs for packages in the 'known-source-uris' dict. This is
+useful if you need to repeatedly import something (which you shouldn't need
+to do, unless you're developing the Import Tool).
 
 Help with linking package version to Git tag
 --------------------------------------------
@@ -76,25 +79,37 @@ repo.
 Help with chunk .morph generation
 ---------------------------------
 
-If you create a chunk morph by hand, you must add some extra fields:
+Copy an existing one :-)
 
-  - `x-build-dependencies-YYY`
-  - `x-runtime-dependencies-YYY`
-
-These are a dict mapping dependency name to dependency version. For example:
-
-    x-build-dependencies-rubygems: {}
-    x-runtime-dependencies-rubygems:
-        hashie: 2.1.2
-        json: 1.8.1
-        mixlib-log: 1.6.0
-        rack: 1.5.2
-
-All dependencies will be included in the resulting stratum. Those which are build
-dependencies of other components will be added to the relevant 'build-depends'
-field.
-
-These fields are non-standard extensions to the morphology format.
-
-For more package-system specific information, see the relevant README file, e.g
+For package-system specific information, see the relevant README file, e.g
 README.rubygems for RubyGem imports.
+
+
+Help with writing a .foreign-dependencies file
+----------------------------------------------
+
+If you need to write a .foreign-dependencies file, it's simply a JSON
+document containing two nested dicts. You should be able to copy an
+existing one.
+
+You may not need to create one. For example, if you get an error from the
+'rubygems.find_deps' program because a package has an invalid Ruby .gemspec
+file, you could try fix the .gemspec file in the appropriate repo in the
+'checkouts/' subdirectory, and rerun the Import Tool.
+
+If you ignore errors from the .find_deps program, you will have two problems.
+First, some dependencies might be missed. Second, a stratum won't be generated
+unless you use the `--force-stratum-generation` option.
+
+
+Common errors
+-------------
+
+If you see the program showing this prompt and waiting for input:
+
+    Username for 'https://github.com':
+
+This means that 'Lorry' has tried to pull an invalid Github URL. The .lorry
+entry for the current package lists the wrong URL. This may be due to bad
+metadata, an error in the .to_lorry program (check the log file), or a wrong
+URL in a .lorry file because someone wrote it wrong.
