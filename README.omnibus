@@ -3,6 +3,13 @@ Omnibus import
 
 See 'README' for general information on the Baserock Import Tool.
 
+NOTE: Omnibus support should be considered 'proof of concept' at this
+stage. It has driven some useful improvements in the Import Tool, and
+it has generated morphologies for most of the components used in
+<https://github.com/opscode/omnibus-chef> (which were not then built).
+The code probably needs a little love if you want to do more than that
+with it.
+
 To use
 ------
 
