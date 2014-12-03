@@ -107,9 +107,9 @@ class RubyGemLorryGenerator(ImportExtension):
         homepage_uri = gem_info['homepage_uri']
         if homepage_uri is not None and len(homepage_uri) > 0:
             logging.debug('Got homepage_uri %s', source_code_uri)
-            netloc = urlparse.urlsplit(homepage_uri)[1]
-            if netloc == 'github.com':
-                return homepage_uri
+            uri = self.detect_source_code_uri_from_homepage(homepage_uri)
+            if uri is not None:
+                return uri
 
         # Further possible leads on locating source code.
         # http://ruby-toolbox.com/projects/$gemname -> sometimes contains an
@@ -120,6 +120,38 @@ class RubyGemLorryGenerator(ImportExtension):
         raise GenerateLorryException(
             "Gem metadata for '%s' does not point to its source code "
             "repository." % gem_name)
+
+    def detect_source_code_uri_from_homepage(self, homepage_uri):
+        '''Try to detect source code location based on homepage_uri.
+
+        It seems common for RubyGem projects to be hosted on Github, and for
+        them to use link to a URL inside their Github project as their
+        homepage, and for them to not set source_code_uri. This heuristic saves
+        the user from manually writing .lorry files for such projects.
+
+        '''
+
+        uri_parts = urlparse.urlsplit(homepage_uri)
+        scheme, netloc = uri_parts[0:2]
+
+        if netloc == 'github.com':
+            path = uri_parts[2]
+            path_parts = path.lstrip('/').split('/')
+
+            if len(path_parts) < 2:
+                logging.debug(
+                    '%s points to Github but not a specific repo.',
+                    homepage_uri)
+                return None
+
+            # Strip off any trailing components, stuff like '/wiki'.
+            path = '/'.join(path_parts[0:2])
+            uri = '%s://%s/%s'  % (scheme, netloc, path)
+
+            logging.debug('Assuming %s is the source code URI.', uri)
+            return uri
+        else:
+            return None
 
     def project_name_from_repo(self, repo_url):
         if repo_url.endswith('/tree/master'):
