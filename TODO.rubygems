@@ -20,3 +20,6 @@ It's ugly to have the version number in every chunk name, and it makes it more
 time-consuming to do version updates of individual components in a stratum.
 The chunk name should default to '$chunkname', except when multiple versions
 of the chunk are found.
+
+The tool should autodetect where 'Hoe' is used and generate a chunk morph
+that runs `rake gem` instead of `gem build xxx.gemspec`.
