@@ -1,6 +1,22 @@
 RubyGems-specific improvements for the Baserock Import tool
 -----------------------------------------------------------
 
+Not all Ruby applications are packaged as RubyGems. The tool should be able
+to process any directory containing a Gemfile and calculate its dependency
+graph from that, even if there is no .gemspec file. A little background:
+initially I was looking for an approach that works for *all* Ruby projects,
+and found that if I read the Gemfile of each project the overall dependency
+graph would end up being enourmous, and circular. I switched to creating a
+fake Gemfile that included only the .gemspec file of the specific project
+being imported. This works well for dependencies, but I've realised that the
+goal project (the thing you actually want to import) should probably be
+treated differently. I envisage a solution where there is a new type of
+importer, named 'ruby-bundler' or some such thing, which takes a repo URL
+and reads dependencies from the Gemfile inside that repo. In the
+.foreign-dependencies file for the package it can list all the dependencies
+as 'rubygem' rather than 'ruby-bundler' dependencies, so that they are
+processed as Gems (using the .gemspec rather than the Gemfile).
+
 If you could pass a Git ref as GEM_VERSION it might be useful. Currently you
 can't do that.
 
