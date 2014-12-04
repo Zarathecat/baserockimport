@@ -9,3 +9,11 @@ It's ugly to have the version number in every chunk name, and it makes it more
 time-consuming to do version updates of individual components in a stratum.
 The chunk name should default to '$chunkname', except when multiple versions
 of the chunk are found.
+
+It's useful to be able to patch some chunks in the checkouts/ subdirectory
+so that the tool can process them. Right now there's no way to tell the
+tool 'use this ref that I created instead of whatever tag you chose based on
+the version number'. It'd be nice if this were possible. Doing this on
+the commandline would get overly verbose, but it'd be possible to add a
+section in the config file such as [ref-overrides] and allow the user to
+list them there.
