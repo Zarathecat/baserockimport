@@ -63,7 +63,7 @@ class RubyGemChunkMorphologyGenerator < Importer::Base
   end
 
   def is_signed_gem(spec)
-    spec.signing_key != nil
+    spec.signing_key != nil || spec.cert_chain != nil
   end
 
   def generate_chunk_morph_for_gem(gemspec_file, spec)
