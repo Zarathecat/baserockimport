@@ -17,3 +17,8 @@ the version number'. It'd be nice if this were possible. Doing this on
 the commandline would get overly verbose, but it'd be possible to add a
 section in the config file such as [ref-overrides] and allow the user to
 list them there.
+
+If the .to_lorry program tried fetching the URL first and detecting if it
+returns a 404 'not found' error then we wouldn't hit the problem of seeing a
+'Username for 'https://github.com':' prompt for invalid URLs in .lorry files
+as much.

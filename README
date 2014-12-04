@@ -113,3 +113,7 @@ This means that 'Lorry' has tried to pull an invalid Github URL. The .lorry
 entry for the current package lists the wrong URL. This may be due to bad
 metadata, an error in the .to_lorry program (check the log file), or a wrong
 URL in a .lorry file because someone wrote it wrong.
+
+The TODO file notes that if the .to_lorry program tried fetching the URL first
+and detecting if it returns a 404 'not found' error then we wouldn't hit this
+problem.
