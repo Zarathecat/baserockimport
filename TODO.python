@@ -1,0 +1,92 @@
+TODOs
+-----
+
+* if homepage_url (in the pypi metadata for a given pacakge) is a html page,
+scrape the page for repo links, this should reduce the number of tarball
+imports the tool does.
+
+* scheme x.y e.g. pip.find_deps should avoid using a '.' makes it more
+difficult to import extensions as modules, consider the case where we want
+to import pip.find_deps for use in a test suite.
+
+* prefix cmd to logs, so when we run pip, prefix log msg with 'pip',
+same for egg_info etc
+
+* abstract popen/log,
+there is a pattern of calling Popen with stderr=STDOUT and reading
+from p.stdout till EOF, then waiting for the subprocess to terminate.
+Since this is used in 3 places, it should be factored out really.
+
+* error messages for constraints is currently a parsed form of the version
+number e.g. ('==', ('00000000', '00000000',      '00000011', '*final'))
+this will be confusing, we should emit nice version numbers.
+
+* Can we avoid the compilation that happens during import of some packages,
+i.e. nixtla
+
+* add a test runner
+
+* Importing python packages that use pbr fails, see
+https://bitbucket.org/pypa/setuptools/issue/73/typeerror-dist-must-be-a-distribution#comment-7267980
+The most sensible option would seem to be to make use of the sane environment
+that pbr provides: just read the dependency information from the text files
+that pbr projects provide, see, http://docs.openstack.org/developer/pbr/
+
+Results from running the import tool on various python packages follow:
+
+* Imports tested so far (stratum is generated)
+    * SUCCEEDS
+        * nixtla: fine but requires compilation
+        * ryser
+        * Twisted
+        * Django
+        * textdata
+        * whale-agent
+        * virtualenv
+        * lxml
+        * nose
+        * six
+        * simplejson
+        * pika
+        * MarkupSafe
+        * zc.buildout
+        * Paste
+        * pycrypto
+        * Jinja2
+        * Flask
+        * bcdoc
+        * pymongo
+
+    * FAILS
+        * python-keystoneclient
+            * All openstack stuff requires pbr, pbr does not play nicely with
+                current setuptools see: [Issue 73](https://bitbucket.org/pypa/setuptoolsissue/73/typeerror-dist-must-be-a-distribution#comment-7267980)
+            we can either fix setuptools/pbr or make use of the sane environment
+            pbr provides.
+        * persistent-pineapple
+            * Git repo[1] has different layout to tarball[2] downloadeable from pypi,
+            git repo's layout isn't 'installable' by pip, so dependencies can
+            not be determined.
+            [1]: https://github.com/JasonAUnrein/Persistent-Pineapple
+            [2]: https://pypi.python.org/packages/source/p/persistent_pineapple/persistent_pineapple-1.0.0.tar.gz
+        * ftw.blog
+            * cannot satisfy dependencies
+        * boto
+            * cannot satisfy dependencies
+        * jmespath
+            * cannot satisfy dependencies
+        * rejester
+            * its setup.py subclasses distutils.core
+        * requests
+            * cannot satisfy dependencies
+        * MySQL-python
+            * egg_info blows up,
+            * python setup.py install doesn't even work
+            * maybe the user's expected to do some manual stuff first, who knows
+        * rejester (its setup.py subclasses distutils.core)
+        * redis-jobs (succeeded at first, no longer exists on pypi)
+        * coverage (stratum couldn't be generated because some tags are missing)
+
+* Imports completely tested, built, deployed and executed successfully:
+
+    * Flask
