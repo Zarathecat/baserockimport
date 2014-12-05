@@ -1,0 +1,59 @@
+README
+------
+
+Most (nearly all) python packages use setuptools, for detailed information on
+setuptools see the setuptools docs[1]. If you're not familiar with setuptools
+you should read the docs[1][2] before continuing.
+
+Please note that this tool expects any python packages to be on pypi, you
+cannot currently import packages from other places.
+
+This import tool uses a combination of pypi metadata,
+pip and setuptools commands to extract dependency information
+to create a set of definitions useable with Baserock. This is not a stable
+process and will not work smoothly in many cases: because setup.py
+is just an ordinary Python script it's possible for a setup.py to do things that
+break the import tool's means to extract dependencies, for example, some packages
+bypass parts of setuptools and subclass parts of distutils's core instead.
+Another problem with importing python packages is that packages are uploaded
+to pypi as tarballs rather than as repositories and as a result the import tool
+generates a lot of tarball lorries which is the least desireable kind of lorry
+to use with Baserock. To avoid this the import tool looks through parts of the
+package metadata for links to real repos, this detection is currently extremely
+basic and will hopefully be improved in future to allow the tool to reduce the
+number of tarball lorries it generates. Some python packages
+only declare their dependency information in a human readable form within a
+README, this tool cannot do anything to extract dependency
+information that is not encoded in a machine readable fashion. At the time of
+writing numpy is an example of such a package: running the import tool on numpy
+will yield a stratum that contains numpy and none of its dependencies.
+
+Python packages may require other packages to be present for
+build/installation to proceed, in setuptools these are called setup requirements.
+Setup requirements naturally translate to Baserock build dependencies, in
+practice most python packages don't have any setup requirements, so the lists
+of build-depends for each chunk will generally be empty lists.
+
+Many python packages require additional (in addition to a python interpreter)
+packages to be present at runtime, in setuptools parlance these are install
+requirements. The import tool uses pip to recursively extract runtime
+dependency information for a given package, each dependency is added to the
+same stratum as the package we're trying to import. All packages implicitly
+depend on a python interpreter, the import tool encodes this by making all
+strata build depend on core, which at the time of writing contains cpython.
+
+Traps
+-----
+
+* Because pip executes setup.py commands to determine dependencies
+and some packages' setup.py files invoke compilers, the import tool may end up
+running compilers.
+
+* pip puts errors on stdout, some import tool errors may be vague: if it's
+not clear what's going on you can check the log, if you're using
+--log-level=debug then the import tool will log the output of all the commands
+it executes to obtain dependency information.
+
+[1]: https://pythonhosted.org/setuptools/
+[2]: https://pythonhosted.org/an_example_pypi_project/setuptools.html
+
