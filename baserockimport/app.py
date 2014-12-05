@@ -82,6 +82,8 @@ class BaserockImportApplication(cliapp.Application):
                             arg_synopsis='REPO PROJECT_NAME SOFTWARE_NAME')
         self.add_subcommand('rubygems', self.import_rubygems,
                             arg_synopsis='GEM_NAME [GEM_VERSION]')
+        self.add_subcommand('python', self.import_python,
+                            arg_synopsis='PACKAGE_NAME [VERSION]')
 
         self.stdout_has_colours = self._stream_has_colours(sys.stdout)
 
@@ -182,4 +184,21 @@ class BaserockImportApplication(cliapp.Application):
             app=self,
             goal_kind='rubygems', goal_name=args[0], goal_version='master')
         loop.enable_importer('rubygems', strata=['strata/ruby.morph'])
+        loop.run()
+
+    def import_python(self, args):
+        '''Import one or more python packages.'''
+        if len(args) < 1 or len(args) > 2:
+            raise cliapp.AppException(
+                'Please pass the name of the python package on the commandline.')
+
+        package_name = args[0]
+
+        package_version = args[1] if len(args) == 2 else 'master'
+
+        loop = baserockimport.mainloop.ImportLoop(app=self,
+                                                  goal_kind='python',
+                                                  goal_name=package_name,
+                                                  goal_version=package_version)
+        loop.enable_importer('python', strata=['strata/core.morph'])
         loop.run()
