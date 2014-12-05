@@ -58,6 +58,7 @@ def run_extension(filename, args):
         output.append(line)
 
     def report_extension_stderr(line):
+        logging.debug('Received "%s" on stderr' % line)
         errors.append(line)
 
     def report_extension_logger(line):
