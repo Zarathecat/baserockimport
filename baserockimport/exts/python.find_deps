@@ -1,0 +1,352 @@
+#!/usr/bin/env python
+#
+# Find the build and runtime dependencies for a given Python package
+#
+# Copyright (C) 2014  Codethink Limited
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; version 2 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+# TODO: there is a pattern of calling Popen with stderr=STDOUT and reading
+# from p.stdout till EOF, then waiting for the subprocess to terminate.
+# Since this is used in 3 places, it should be factored out really.
+
+from __future__ import print_function
+
+import sys
+import subprocess
+import os
+import json
+import tempfile
+import logging
+import select
+import signal
+
+import pkg_resources
+import xmlrpclib
+
+from importer_python_common import *
+
+class ConflictError(Exception):
+    def __init__(self, name, spec_x, spec_y):
+        self.name = name
+        self.specs = [spec_x, spec_y]
+
+        super(ConflictError, self).__init__('%s: %s conflicts with %s'
+                                            % (name, spec_x, spec_y))
+
+class UnmatchedError(Exception):
+    pass
+
+def eq_check((xop, xval), (yop, yval)):
+    assert xop == '=='  # Assumption, '==' spec is x
+
+    ops = (xop, yop)
+    vals = (xval, yval)
+
+    # Map a pair to a function that will return true
+    # if the specs are in conflict.
+    comp = {('==', '=='):   lambda (x, y): x != y,      # conflict if x != y
+            ('==', '!='):   lambda (x, y): x == y,      # conflict if x == y
+            ('==', '<'):    lambda (x, y): x >= y,      # conflict if x >= y
+            ('==', '>'):    lambda (x, y): x <= y,      # conflict if x <= y
+            ('==', '<='):   lambda (x, y): x > y,       # conflict if x > y
+            ('==', '>='):   lambda (x, y): x < y,       # conflict if x < y
+    }
+
+    return comp[ops](vals)
+
+def lt_check((xop, xval), (yop, yval)):
+    assert xop == '<'   # Assumption, '<' spec is x
+
+    ops = (xop, yop)
+    vals = (xval, yval)
+
+    # Map a pair to a function that will return true
+    # if the specs are in conflict.
+    comp = {('<', '<'):     lambda (x, y): False,       # < x < y cannot conflict
+            ('<', '>'):     lambda (x, y): x <= y,      # conflict if x <= y
+            ('<', '<='):    lambda (x, y): False,       # < x <= y cannot conflict
+            ('<', '>='):    lambda (x, y): x <= y       # conflict if x <= y
+    }
+
+    return comp[ops](vals)
+
+def gt_check((xop, xval), (yop, yval)):
+    assert xop == '>'   # Assumption, '>' spec is x
+
+    ops = (xop, yop)
+    vals = (xval, yval)
+
+    # Map a pair to a function that will return true
+    # if the specs are in conflict.
+    comp = {('>', '>'):     lambda (x, y): False,       # > x > y cannot conflict
+            ('>', '<='):    lambda (x, y): x >= y,      # conflict if x >= y
+            ('>', '>='):    lambda (x, y): False,       # > x >= y cannot conflict
+    }
+
+    return comp[ops](vals)
+
+def lte_check((xop, xval), (yop, yval)):
+    assert xop == '<='  # Assumption, '<=' spec is x
+
+    ops = (xop, yop)
+    vals = (xval, yval)
+
+    # Map a pair to a function that will return true
+    # if the specs are in conflict.
+    comp = {('<=', '<='): lambda (x, y): False,   # <= x <= y cannot conflict
+            ('<=', '>='): lambda (x, y): x < y
+    }
+
+    return comp[ops](vals)
+
+def gte_check((xop, xval), (yop, yval)):
+    assert xop == '>='  # Assumption, '>=' spec is x
+
+    ops = (xop, yop)
+    vals = (xval, yval)
+
+    # Map a pair to a function that will return true
+    # if the specs are in conflict.
+    comp = {('>=', '>='): lambda (x, y): False}   # >= x >= y cannot conflict
+
+    return comp[ops](vals)
+
+def reverse_if(c, t1, t2):
+    return [t2, t1] if c else (t1, t2)
+
+def conflict((xop, xval), (yop, yval)):
+    x, y = (xop, xval), (yop, yval)
+    ops = (xop, yop)
+
+    if '==' in ops: return eq_check(*reverse_if(yop == '==', x, y))
+    elif '!=' in ops: return False  # != can only conflict with ==
+    elif '<' in ops: return lt_check(*reverse_if(yop == '<', x, y))
+    elif '>' in ops: return gt_check(*reverse_if(yop == '>', x, y))
+    elif '<=' in ops: return lte_check(*reverse_if(yop == '<=', x, y))
+
+    # not reversing here, >= x >= y should be the only combination possible
+    # here, if it's not then something is wrong.
+    elif '>=' in ops: return gte_check(x, y)
+
+    else: raise UnmatchedError('Got unmatched case (%s, %s)' % x, y)
+
+def conflict_with_set(spec, specset):
+    for s in specset:
+        if conflict(spec, s):
+            return s
+
+    return None
+
+def resolve_specs(requirements):
+    requirements = list(requirements)
+
+    logging.debug('Resolving specs from the following requirements: %s'
+                  % requirements)
+    specsets = {}
+
+    for r in requirements:
+        if r.project_name not in specsets:
+            specsets[r.project_name] = set()
+
+        specset = specsets[r.project_name]
+
+        for (op, version) in r.specs:
+            spec = (op, pkg_resources.parse_version(version))
+
+            c = conflict_with_set(spec, specset)
+            if not c:
+                specset.add(spec)
+            else:
+                raise ConflictError(r.project_name, c, spec)
+
+    return specsets
+
+def resolve_versions(specsets):
+    logging.debug('Resolving versions')
+    versions = {}
+
+    for (proj_name, specset) in specsets.iteritems():
+        client = xmlrpclib.ServerProxy(PYPI_URL)
+
+        # Bit of a hack to deal with pypi case insensitivity
+        new_proj_name = name_or_closest(client, proj_name)
+        if new_proj_name == None:
+            error("Couldn't find any project with name '%s'" % proj_name)
+
+        logging.debug("Treating %s as %s" % (proj_name, new_proj_name))
+        proj_name = new_proj_name
+
+        releases = client.package_releases(proj_name)
+
+        logging.debug('Found %d releases of %s: %s'
+                      % (len(releases), proj_name, releases))
+
+        candidates = [v for v in releases
+            if specs_satisfied(pkg_resources.parse_version(v), specset)]
+
+        if len(candidates) == 0:
+            error("Couldn't find any version of %s to satisfy: %s"
+                  % (proj_name, specset))
+
+        logging.debug('Found %d releases of %s that satisfy constraints: %s' %
+                      (len(candidates), proj_name, candidates))
+
+        assert proj_name not in versions
+        versions[proj_name] = candidates
+
+    return versions
+
+def find_build_deps(source, name, version=None):
+    logging.debug('Finding build dependencies for %s%s at %s'
+                  % (name, ' %s' % version if version else '', source))
+
+    # This amounts to running python setup.py egg_info and checking
+    # the resulting egg_info dir for a file called setup_requires.txt
+
+    logging.debug('Running egg_info command')
+
+    p = subprocess.Popen(['python', 'setup.py', 'egg_info'], cwd=source,
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    while True:
+        line = p.stdout.readline()
+        if line == '':
+            break
+
+        logging.debug(line.rstrip('\n'))
+
+    p.wait()    # even with eof, wait for termination
+
+    if p.returncode != 0:
+        # Something went wrong, but in most cases we can probably still
+        # successfully import without knowing the setup_requires list
+        # because many python packages have an empty setup_requires list.
+        logging.warning("Couldn't obtain build dependencies for %s:"
+             " egg_info command failed"
+             " (%s may be using distutils rather than setuptools)"
+             % (name, name))
+
+    egg_dir = '%s.egg-info' % name
+    build_deps_file = os.path.join(source, egg_dir, 'setup_requires.txt')
+
+    build_deps = {}
+
+    # Check whether there's a setup_requires.txt
+    if not os.path.isfile(build_deps_file):
+        build_deps = {}
+    else:
+        with open(build_deps_file) as f:
+            specsets = resolve_specs(pkg_resources.parse_requirements(f))
+            logging.debug("Resolved specs for %s: %s" % (name, specsets))
+
+            versions = resolve_versions(specsets)
+            logging.debug('Resolved versions: %s' % versions)
+
+            # Since any of the candidates in versions should satisfy
+            # all specs, we just pick the first version we see
+            build_deps = {name: vs[0] for (name, vs) in versions.iteritems()}
+
+    return build_deps
+
+def find_runtime_deps(source, name, version=None, use_requirements_file=False):
+    logging.debug('Finding runtime dependencies for %s%s at %s'
+                  % (name, ' %s' % version if version else '', source))
+
+    # Run our patched pip to get a list of installed deps
+    # Run pip install . --list-dependencies=instdeps.txt with cwd=source
+
+    # Some temporary file needed for storing the requirements
+    tmpfd, tmppath = tempfile.mkstemp()
+    logging.debug('Writing install requirements to: %s', tmppath)
+
+    args = ['pip', 'install', '.', '--list-dependencies=%s' % tmppath]
+    if use_requirements_file:
+        args.insert(args.index('.') + 1, '-r')
+        args.insert(args.index('.') + 2, 'requirements.txt')
+
+    logging.debug('Running pip, args: %s' % args)
+
+    p = subprocess.Popen(args, cwd=source, stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT)
+
+    while True:
+        line = p.stdout.readline()
+        if line == '':
+            break
+
+        logging.debug(line.rstrip('\n'))
+
+    p.wait()    # even with eof, wait for termination
+
+    logging.debug('pip exited with code: %d' % p.returncode)
+
+    if p.returncode != 0:
+        error('failed to get runtime dependencies for %s %s at %s'
+              % (name, version, source))
+
+    with os.fdopen(tmpfd) as tmpfile:
+        ss = resolve_specs(pkg_resources.parse_requirements(tmpfile))
+        logging.debug("Resolved specs for %s: %s" % (name, ss))
+
+        logging.debug("Removing root package from specs")
+        # filter out "root" package
+        specsets = {k: v for (k, v) in ss.iteritems() if k != name}
+
+        versions = resolve_versions(specsets)
+        logging.debug('Resolved versions: %s' % versions)
+
+        # Since any of the candidates in versions should satisfy
+        # all specs, we just pick the first version we see
+        runtime_deps = {name: vs[0] for (name, vs) in versions.iteritems()}
+
+    os.remove(tmppath)
+
+    if (len(runtime_deps) == 0 and not use_requirements_file
+            and os.path.isfile(os.path.join(source, 'requirements.txt'))):
+        logging.debug('No install requirements specified in setup.py,'
+                        ' using requirements file')
+        return find_runtime_deps(source, name, version,
+                                 use_requirements_file=True)
+
+    return runtime_deps
+
+def main():
+    if len(sys.argv) not in [3, 4]:
+        print('usage: %s PACKAGE_SOURCE_DIR NAME [VERSION]' % sys.argv[0])
+        sys.exit(1)
+
+    logging.debug('%s: sys.argv[1:]: %s' % (sys.argv[0], sys.argv[1:]))
+    source, name = sys.argv[1:3]
+    version = sys.argv[3] if len(sys.argv) == 4 else None
+
+    client = xmlrpclib.ServerProxy(PYPI_URL)
+    new_name = name_or_closest(client, name)
+
+    if new_name == None:
+        error("Couldn't find any project with name '%s'" % name)
+
+    logging.debug('Treating %s as %s' % (name, new_name))
+    name = new_name
+
+    deps = {}
+    deps['build-dependencies'] = find_build_deps(source, name, version)
+    deps['runtime-dependencies'] = find_runtime_deps(source, name, version)
+
+    root = {'python': deps}
+
+    print(json.dumps(root))
+
+if __name__ == '__main__':
+    PythonExtension().run()
