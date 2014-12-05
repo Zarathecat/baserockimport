@@ -31,7 +31,7 @@ import select
 
 import pkg_resources
 
-from importer_pip_common import *
+from importer_python_common import *
 
 def fetch_package_metadata(package_name):
     try:
