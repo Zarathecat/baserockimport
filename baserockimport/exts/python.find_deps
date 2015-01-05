@@ -301,8 +301,12 @@ def find_runtime_deps(source, name, version=None, use_requirements_file=False):
         logging.debug("Resolved specs for %s: %s" % (name, ss))
 
         logging.debug("Removing root package from specs")
+
         # filter out "root" package
-        specsets = {k: v for (k, v) in ss.iteritems() if k != name}
+        # hyphens and underscores are treated as equivalents
+        # in distribution names
+        specsets = {k: v for (k, v) in ss.iteritems()
+            if k not in [name, name.replace('_', '-')]}
 
         versions = resolve_versions(specsets)
         logging.debug('Resolved versions: %s' % versions)

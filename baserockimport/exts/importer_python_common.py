@@ -53,15 +53,25 @@ def name_or_closest(client, package_name):
 
     If no case insensitive match can be found then we return None'''
 
-    results = client.package_releases(package_name)
+    # According to http://legacy.python.org/dev/peps/pep-0426/#name
+    # "All comparisons of distribution names MUST be case insensitive,
+    #  and MUST consider hyphens and underscores to be equivalent."
+    #
+    # so look for both the hyphenated version that is passed to this function
+    # and the underscored version.
+    underscored_package_name = package_name.replace('-', '_')
 
-    if len(results) > 0:
-        logging.debug('Found package %s' % package_name)
-        return package_name
+    for name in [package_name, underscored_package_name]:
+        results = client.package_releases(name)
+
+        if len(results) > 0:
+            logging.debug('Found package %s' % name)
+            return name
 
     logging.debug("Couldn't find exact match for %s,"
                     "searching for a similar match" % package_name)
-    results = client.search({'name': package_name})
+
+    results = client.search({'name': [package_name, underscored_package_name]})
 
     logging.debug("Got the following similarly named packages '%s': %s"
                   % (package_name, str([(result['name'], result['version'])
@@ -70,7 +80,8 @@ def name_or_closest(client, package_name):
     logging.debug('Filtering for exact case-insensitive matches')
 
     results = [result for result in results
-                if result['name'].lower() == package_name.lower()]
+                if result['name'].lower() in
+                [package_name.lower(), underscored_package_name.lower()]]
 
     logging.debug('Filtered results: %s' % results)
 
