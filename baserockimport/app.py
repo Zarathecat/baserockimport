@@ -182,7 +182,7 @@ class BaserockImportApplication(cliapp.Application):
 
         loop = baserockimport.mainloop.ImportLoop(
             app=self,
-            goal_kind='rubygems', goal_name=args[0], goal_version='master')
+            goal_kind='rubygems', goal_name=args[0], goal_version=goal_version)
         loop.enable_importer('rubygems', strata=['strata/ruby.morph'])
         loop.run()
 
