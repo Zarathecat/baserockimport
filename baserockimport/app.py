@@ -78,6 +78,8 @@ class BaserockImportApplication(cliapp.Application):
             return False
 
     def setup(self):
+        self.add_subcommand('npm', self.import_npm,
+                            arg_synopsis='PACKAGE [VERSION]')
         self.add_subcommand('omnibus', self.import_omnibus,
                             arg_synopsis='REPO PROJECT_NAME SOFTWARE_NAME')
         self.add_subcommand('rubygems', self.import_rubygems,
@@ -168,6 +170,22 @@ class BaserockImportApplication(cliapp.Application):
         loop.enable_importer('omnibus',
                              extra_args=[definitions_dir, project_name])
         loop.enable_importer('rubygems')
+        loop.run()
+
+    def import_npm(self, args):
+        '''Import one or more Node.js npm packages.'''
+        if len(args) not in [1, 2]:
+            raise cliapp.AppException(
+                'Please pass the name and version of an npm package on the '
+                'commandline.')
+
+        goal_name = args[0]
+        goal_version = args[1] if len(args) == 2 else 'master'
+
+        loop = baserockimport.mainloop.ImportLoop(
+            app=self,
+            goal_kind='npm', goal_name=goal_name, goal_version=goal_version)
+        loop.enable_importer('npm', strata=['strata/nodejs.morph'])
         loop.run()
 
     def import_rubygems(self, args):
