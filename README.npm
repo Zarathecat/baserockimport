@@ -1,0 +1,21 @@
+You need to set NODE_PATH=/usr/lib/node_modules/ to use this importer!!!!!
+eg: your command could look like:
+
+NODE_PATH=/usr/lib/node_modules/ baserock-import npm PACKAGENAME [version]
+
+The default (and strongly encouraged) behavour of npm is to install the
+modules that a program depends on inside the source tree of the project,
+in a subdirectory called 'node_modules'. The authors of npm are pretty
+against globally installing packages that other packages depend on. There
+is a 'install --global' option which seems to be only for programs that
+you want available in /usr/bin.
+
+npm's FAQ responds to the question of how to have globally installed
+packages, with "Write your own package manager, then.  It´s not that hard.".
+OK! And we could have done that, but we found that by (ab)using the `npm build`
+command it's possible to get npm to install a package into
+/usr/lib/node_modules without installing its dependencies. This is consistent
+with how Baserock (and pretty much every other Linux distribution) tries
+to do things. Node.js doesn't seem to have a built-in 'look for modules here'
+path, so you'll need to set NODE_PATH=/usr/lib/node_modules when running
+programs that use the packages installed in the Baserock system.
