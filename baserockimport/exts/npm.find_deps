@@ -1,0 +1,91 @@
+#!/usr/bin/env node
+//
+// Copyright (C) 2014  Codethink Limited
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; version 2 of the License.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write to the Free Software Foundation, Inc.,
+// 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+async = require("async");
+npm = require("npm");
+semver = require("semver");
+util = require("util");
+
+base = require("./importer_base");
+
+function parseArgs(argv) {
+  if (argv.length === 4)
+    return argv[3];
+
+  if (argv.length === 5)
+    return argv[3] + '@' + argv[4];
+
+  throw("Error! Wrong number of command line arguments! Usage: " +
+        "./npm.find_deps SOURCE_DIR NAME VERSION");
+}
+
+function getDeps(er, packageInfo) {
+  var names = [];
+  var ranges = {};
+  var resolved = {};
+
+  package = base.getFirstItem(packageInfo);
+
+  if (package.dependencies === undefined) {
+    showDeps({});
+    return;
+  }
+
+  names = Object.keys(package.dependencies);
+
+  for (name in package.dependencies)
+    ranges[name] = package.dependencies[name];
+
+  var resolveDepVersion = function(depName, cb) {
+    npm.commands.view([depName], "silent", function (er, packageInfoSet) {
+      if (er) throw er;
+
+      for (i in packageInfoSet) {
+        package = packageInfoSet[i];
+
+        resolved[package.name] = semver.maxSatisfying(package.versions, ranges[package.name]);
+      };
+
+      cb();
+    })
+  };
+
+  async.each(names, resolveDepVersion, function(er){
+    if (er) throw er;
+
+    showDeps(resolved);
+  })
+};
+
+function showDeps(runtimeDeps) {
+  var output = {
+  "npm": {
+      "build-dependencies": {},
+      "runtime-dependencies": runtimeDeps
+    }
+  };
+
+  outputText = JSON.stringify(output, null, 4);
+  console.log(outputText);
+}
+
+npm.load(function(er, npm) {
+  var package = parseArgs(process.argv);
+  if (er) throw er;
+  npm.commands.view([package], "silent", getDeps);
+});
+
